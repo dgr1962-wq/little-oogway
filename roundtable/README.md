@@ -25,6 +25,14 @@ to receive a withholding marker anywhere a local memory-informed Little Oogway
 statement would otherwise enter their docket. `OBJECTION` records dissent but
 does not itself prevent final minutes; unresolved procedural interventions do.
 
+Retry-safe local participants receive one controlled retry. Browser and paid
+API seats are never blindly resubmitted after an ambiguous timeout. If both
+local chair attempts fail, the state becomes `awaiting_chair`; `/roundtable
+chair ROUND_ID` retries only the chair report and preserves every participant
+turn. A service restart cannot strand a preflight: `/roundtable recover
+PREFLIGHT_ID` creates a fresh no-contact confirmation while retaining the
+interrupted record.
+
 This layer is intentionally practical rather than a simulation of a legislature:
 it adds motion continuity, operator rulings, repeat review passes, and honest
 deferment while avoiding invented votes, quorums, seconds, or authorities.
@@ -84,3 +92,9 @@ adds TokenSpace-aware Little Oogway plus visible ChatGPT and Claude participants
 and the DeepSeek API monitor. Ordinary prompts create a no-contact preflight;
 the operator must confirm its identifier before external participants are
 contacted. Status inspection is local-only. A completed round cannot be resumed.
+The localhost monitor on port 8092 shows the active phase and participant,
+elapsed time, the latest procedural ledger, and DeepSeek usage when the API
+reports it. For `deepseek-flash`, the monitor derives a conservative
+off-peak-to-peak USD range from cache-hit, cache-miss, and output tokens using
+the documented rates checked on October 14, 2026. Environment rate overrides
+are available so future pricing changes do not require a code change.

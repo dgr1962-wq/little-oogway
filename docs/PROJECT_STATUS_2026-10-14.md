@@ -22,14 +22,19 @@
    requests, points of order, or unclassified interventions remain unresolved.
    External participants receive withholding markers for Little Oogway's local
    memory-informed material; the local chair receives the full private docket.
+   Retry-safe local model calls receive one controlled retry. A failed chair
+   report leaves the round open for chair-only recovery, without repeating paid
+   or browser participant turns. Interrupted preflights can be recovered into a
+   fresh confirmation, and the local monitor displays phase, participant,
+   elapsed time, ledger state, and reported DeepSeek token usage.
 7. A filtered 2,000-point public-memory export was mapped in Nomic Atlas. The
    live Little Oogway page includes the first snapshot and a link to the map.
 
 ## Verification
 
 - TokenSpace: 5 tests passed.
-- Oogway Core: 55 tests passed.
-- Roundtable: 17 tests passed.
+- Oogway Core: 57 tests passed.
+- Roundtable: 20 tests passed.
 - Public website boundary: 2 tests passed.
 - Live four-seat procedural validation: one opening phase, two review passes,
   one operator ruling, and one completed audit record. ChatGPT, Claude, and

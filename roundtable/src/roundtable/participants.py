@@ -32,6 +32,7 @@ class OllamaParticipant:
     """A local participant backed by Ollama's chat endpoint."""
 
     name: str = "little-oogway"
+    retry_safe: bool = True
     model: str = "qwen3:8b"
     base_url: str = "http://127.0.0.1:11434"
     timeout_seconds: float = 120.0

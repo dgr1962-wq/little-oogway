@@ -9,20 +9,42 @@ from roundtable.procedure import ResumableProcedure
 
 
 class ScriptedParticipant:
-    def __init__(self, name: str, responses: list[str], kind: str = "test") -> None:
+    def __init__(
+        self,
+        name: str,
+        responses: list[object],
+        kind: str = "test",
+        retry_safe: bool = False,
+    ) -> None:
         self.name = name
         self.responses = responses
         self.kind = kind
+        self.retry_safe = retry_safe
         self.prompts: list[str] = []
 
     def respond(self, prompt: str):
         self.prompts.append(prompt)
         if not self.responses:
             raise AssertionError(f"No scripted response remains for {self.name}")
-        return self.responses.pop(0), {"kind": self.kind}
+        response = self.responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response, {"kind": self.kind}
 
 
 class ProcedureTests(unittest.TestCase):
+    def test_retry_safe_local_participant_gets_one_retry(self) -> None:
+        participant = ScriptedParticipant(
+            "Local",
+            [TimeoutError("temporary"), "SUPPORT — recovered"],
+            retry_safe=True,
+        )
+        result = ResumableProcedure._call(participant, "Review")
+        self.assertTrue(result.succeeded)
+        self.assertEqual(result.metadata["attempt_count"], 2)
+        self.assertEqual(len(result.metadata["recovered_errors"]), 1)
+        self.assertEqual(len(participant.prompts), 2)
+
     def test_amendment_keeps_round_open_and_resume_does_not_repeat_openings(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             chair = ScriptedParticipant(
@@ -145,6 +167,33 @@ class ProcedureTests(unittest.TestCase):
             self.assertEqual(result.status, "completed")
             with self.assertRaisesRegex(ValueError, "already complete"):
                 procedure.resume(result.round_id, "Try another pass", chair=chair)
+
+    def test_failed_chair_requires_chair_only_retry(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            chair = ScriptedParticipant(
+                "Chair",
+                [
+                    "Opening",
+                    "SUPPORT — yes",
+                    RuntimeError("chair unavailable"),
+                    "CONSENSUS — recovered minutes",
+                ],
+            )
+            peer = ScriptedParticipant("Peer", ["Opening", "SUPPORT — yes"])
+            procedure = ResumableProcedure([chair, peer], transcript_directory=directory)
+            first = procedure.start("A motion", chair=chair)
+            self.assertEqual(first.status, "awaiting_chair")
+            self.assertEqual(len(peer.prompts), 2)
+
+            recovered = procedure.retry_chair(first.round_id, chair=chair)
+            self.assertEqual(recovered.status, "completed")
+            self.assertEqual(len(peer.prompts), 2)
+            self.assertEqual(len(chair.prompts), 4)
+            events = [
+                json.loads(line)
+                for line in Path(recovered.transcript_path).read_text(encoding="utf-8").splitlines()
+            ]
+            self.assertEqual(sum(event["event"] == "chair_retry" for event in events), 1)
 
     def test_saved_round_rejects_different_participant_roster(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

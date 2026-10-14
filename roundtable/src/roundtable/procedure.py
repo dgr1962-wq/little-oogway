@@ -84,22 +84,31 @@ class ResumableProcedure:
     @staticmethod
     def _call(participant: Participant, prompt: str) -> ParticipantResult:
         started = time.perf_counter()
-        try:
-            content, metadata = participant.respond(prompt)
-            return ParticipantResult(
-                participant=participant.name,
-                content=content,
-                error=None,
-                duration_ms=round((time.perf_counter() - started) * 1000),
-                metadata=metadata,
-            )
-        except Exception as exc:
-            return ParticipantResult(
-                participant=participant.name,
-                content=None,
-                error=f"{type(exc).__name__}: {exc}",
-                duration_ms=round((time.perf_counter() - started) * 1000),
-            )
+        max_attempts = 2 if getattr(participant, "retry_safe", False) else 1
+        errors: list[str] = []
+        for attempt in range(1, max_attempts + 1):
+            try:
+                content, metadata = participant.respond(prompt)
+                return ParticipantResult(
+                    participant=participant.name,
+                    content=content,
+                    error=None,
+                    duration_ms=round((time.perf_counter() - started) * 1000),
+                    metadata={
+                        **metadata,
+                        "attempt_count": attempt,
+                        "recovered_errors": errors,
+                    },
+                )
+            except Exception as exc:
+                errors.append(f"{type(exc).__name__}: {exc}")
+        return ParticipantResult(
+            participant=participant.name,
+            content=None,
+            error=errors[-1],
+            duration_ms=round((time.perf_counter() - started) * 1000),
+            metadata={"attempt_count": max_attempts, "attempt_errors": errors},
+        )
 
     @staticmethod
     def _result_dict(result: ParticipantResult) -> dict[str, Any]:
@@ -228,6 +237,7 @@ class ResumableProcedure:
         *,
         chair: Participant | None = None,
         progress: ProgressCallback | None = None,
+        round_id: str | None = None,
     ) -> ProceduralRoundResult:
         motion = motion.strip()
         if not motion:
@@ -236,7 +246,9 @@ class ResumableProcedure:
         if chair not in self.participants:
             raise ValueError("Chair must be one of the configured participants")
 
-        round_id = str(uuid.uuid4())
+        round_id = round_id or str(uuid.uuid4())
+        if not re.fullmatch(r"[0-9a-f-]{36}", round_id):
+            raise ValueError("Invalid round identifier")
         transcript_path = self.transcript_directory / f"{round_id}.jsonl"
         transcript = JsonlTranscript(transcript_path)
         transcript.write(
@@ -293,6 +305,79 @@ class ResumableProcedure:
         }
         state_path = self._save_state(state)
         transcript.write("procedural_state", round_id=round_id, status=status, state_path=str(state_path))
+        return self._to_result(state, transcript_path, state_path)
+
+    def retry_chair(
+        self,
+        round_id: str,
+        *,
+        chair: Participant | None = None,
+        progress: ProgressCallback | None = None,
+    ) -> ProceduralRoundResult:
+        """Retry only a failed chair report without repeating participant turns."""
+        state = self._load_state(round_id)
+        if state["status"] != "awaiting_chair":
+            raise ValueError("This procedural round is not awaiting a chair report")
+        chair_name = state["chair"]
+        chair = chair or next(
+            participant for participant in self.participants if participant.name == chair_name
+        )
+        if chair.name != chair_name:
+            raise ValueError("The recovered round must retain its original chair")
+
+        latest = state["passes"][-1]
+        openings = tuple(self._result_from_dict(item) for item in state["openings"])
+        reviews = [self._result_from_dict(item) for item in latest["reviews"]]
+        ledger = latest["ledger"]
+        target_status = self._status_from_ledger(ledger)
+        chair_prompt = self._chair_prompt(
+            motion=state["motion"],
+            openings=openings,
+            previous_passes=tuple(state["passes"][:-1]),
+            ruling=latest["operator_ruling"],
+            pass_number=latest["number"],
+            chair=chair,
+            reviews=reviews,
+            ledger=ledger,
+            target_status=target_status,
+        )
+        transcript_path = self.transcript_directory / f"{round_id}.jsonl"
+        transcript = JsonlTranscript(transcript_path)
+        transcript.write(
+            "chair_retry",
+            round_id=round_id,
+            review_pass=latest["number"],
+        )
+        self._notify(progress, phase="chair_retry", participant=chair.name, status="running")
+        chair_report = self._call(chair, chair_prompt)
+        status = target_status if chair_report.succeeded else "awaiting_chair"
+        transcript.write(
+            "chair_report",
+            round_id=round_id,
+            review_pass=latest["number"],
+            procedural_status=status,
+            **self._result_dict(chair_report),
+        )
+        self._notify(
+            progress,
+            phase="chair_retry",
+            participant=chair.name,
+            status="completed" if chair_report.succeeded else "failed",
+        )
+        latest["chair_report"] = self._result_dict(chair_report)
+        state["status"] = status
+        state_path = self._save_state(state)
+        transcript.write(
+            "procedural_state", round_id=round_id, status=status, state_path=str(state_path)
+        )
+        if status == "completed":
+            transcript.write(
+                "round_completed",
+                round_id=round_id,
+                mode="resumable_procedure",
+                review_passes=latest["number"],
+                succeeded=all(result.succeeded for result in (*openings, *reviews, chair_report)),
+            )
         return self._to_result(state, transcript_path, state_path)
 
     def resume(
@@ -412,14 +497,74 @@ class ResumableProcedure:
             review_pass=pass_number,
             entries=ledger,
         )
-        open_items = [entry for entry in ledger if entry["requires_ruling"]]
-        status = "awaiting_ruling" if open_items else "completed"
+        target_status = self._status_from_ledger(ledger)
+        self._notify(
+            progress,
+            phase="ledger",
+            participant=None,
+            status=target_status,
+            review_pass=pass_number,
+            ledger=ledger,
+        )
+        chair_prompt = self._chair_prompt(
+            motion=motion,
+            openings=openings,
+            previous_passes=previous_passes,
+            ruling=ruling,
+            pass_number=pass_number,
+            chair=chair,
+            reviews=reviews,
+            ledger=ledger,
+            target_status=target_status,
+        )
+        self._notify(progress, phase="chair", participant=chair.name, status="running")
+        chair_report = self._call(chair, chair_prompt)
+        status = target_status if chair_report.succeeded else "awaiting_chair"
+        transcript.write(
+            "chair_report",
+            round_id=round_id,
+            review_pass=pass_number,
+            procedural_status=status,
+            **self._result_dict(chair_report),
+        )
+        self._notify(progress, phase="chair", participant=chair.name, status="completed" if chair_report.succeeded else "failed")
+        if status == "completed":
+            transcript.write(
+                "round_completed",
+                round_id=round_id,
+                mode="resumable_procedure",
+                review_passes=pass_number,
+                succeeded=all(result.succeeded for result in (*openings, *reviews, chair_report)),
+            )
+        return reviews, ledger, chair_report, status
+
+    @staticmethod
+    def _status_from_ledger(ledger: list[dict[str, Any]]) -> str:
+        return (
+            "awaiting_ruling"
+            if any(entry["requires_ruling"] for entry in ledger)
+            else "completed"
+        )
+
+    def _chair_prompt(
+        self,
+        *,
+        motion: str,
+        openings: tuple[ParticipantResult, ...],
+        previous_passes: tuple[dict[str, Any], ...],
+        ruling: str | None,
+        pass_number: int,
+        chair: Participant,
+        reviews: list[ParticipantResult],
+        ledger: list[dict[str, Any]],
+        target_status: str,
+    ) -> str:
         ledger_text = "\n".join(
             f"- {entry['item_id']} {entry['participant']}: {entry['disposition']} ({entry['status']})"
             for entry in ledger
         )
         review_docket = self._docket(reviews)
-        if open_items:
+        if target_status == "awaiting_ruling":
             chair_instruction = (
                 "Produce an INTERIM PROCEDURAL REPORT. The disposition must be DEFERRED. "
                 "List every open item by its item ID, explain what ruling, answer, or exact "
@@ -452,7 +597,8 @@ class ResumableProcedure:
                 + self._docket(previous_reviews)
             )
         chair_history = "\n\n".join(chair_history_sections) or "[No earlier review pass]"
-        chair_prompt = (
+        ruling_text = ruling or "[No operator ruling yet]"
+        return (
             f"LITTLE OOGWAY ROUNDTABLE — CHAIR REPORT AFTER PASS {pass_number}\n\n"
             f"You are {chair.name}, the presiding chair.\n\n"
             f"Motion:\n{motion}\n\n"
@@ -466,25 +612,6 @@ class ResumableProcedure:
             "describe private chair material as absent merely because it was withheld externally.\n\n"
             f"{chair_instruction}"
         )
-        self._notify(progress, phase="chair", participant=chair.name, status="running")
-        chair_report = self._call(chair, chair_prompt)
-        transcript.write(
-            "chair_report",
-            round_id=round_id,
-            review_pass=pass_number,
-            procedural_status=status,
-            **self._result_dict(chair_report),
-        )
-        self._notify(progress, phase="chair", participant=chair.name, status="completed" if chair_report.succeeded else "failed")
-        if status == "completed":
-            transcript.write(
-                "round_completed",
-                round_id=round_id,
-                mode="resumable_procedure",
-                review_passes=pass_number,
-                succeeded=all(result.succeeded for result in (*openings, *reviews, chair_report)),
-            )
-        return reviews, ledger, chair_report, status
 
     def _to_result(
         self,

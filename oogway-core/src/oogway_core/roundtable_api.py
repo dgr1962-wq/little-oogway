@@ -29,7 +29,7 @@ from .tools import AbsorbSourceTool
 MODEL_ID = "little-oogway-roundtable"
 WORKSPACE = Path(__file__).resolve().parents[3]
 COMMAND_RE = re.compile(
-    r"^/roundtable\s+(confirm|resume|status)\s+([0-9a-f-]{36})(?:\s*\n(.*))?$",
+    r"^/roundtable\s+(confirm|resume|status|chair|recover)\s+([0-9a-f-]{36})(?:\s*\n(.*))?$",
     re.IGNORECASE | re.DOTALL,
 )
 
@@ -92,6 +92,10 @@ class RoundtableRuntime:
         ) if deepseek_key else None
         self._round_lock = threading.Lock()
         self.preflight_directory = self.transcript_directory / "preflight"
+        self.runtime_instance = str(uuid.uuid4())
+        self.preflight_lease_seconds = int(
+            os.getenv("ROUNDTABLE_PREFLIGHT_LEASE_SECONDS", "1800")
+        )
 
     @staticmethod
     def _write_json(path: Path, value: dict[str, Any]) -> None:
@@ -116,7 +120,39 @@ class RoundtableRuntime:
             names.append("Independent Observer")
         return names
 
-    def _create_preflight(self, motion: str) -> tuple[str, dict[str, Any]]:
+    def _render_preflight(self, record: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+        preflight_id = record["preflight_id"]
+        participants = record["participants"]
+        external_prompt = record["external_prompt"]
+        recovery_note = (
+            f"\n\nThis safely replaces interrupted preflight `{record['recovered_from']}`."
+            if record.get("recovered_from") else ""
+        )
+        content = (
+            "# Roundtable preflight\n\n"
+            f"**Preflight:** `{preflight_id}`  \n"
+            f"**Participants:** {', '.join(participants)}  \n"
+            "**Procedure:** openings → review pass → operator ruling if required → "
+            "additional review pass → final chair minutes\n\n"
+            "## Exact opening prompt sent to external participants\n\n"
+            f"```text\n{external_prompt}\n```\n\n"
+            "Little Oogway's memory-informed statements remain withheld from external "
+            "dockets. No external model has been contacted by this preflight."
+            f"{recovery_note}\n\n"
+            "To begin this exact round, send:\n\n"
+            f"`/roundtable confirm {preflight_id}`"
+        )
+        return content, {
+            "mode": "preflight",
+            "preflight_id": preflight_id,
+            "participants": participants,
+            "external_models_contacted": False,
+            "recovered_from": record.get("recovered_from"),
+        }
+
+    def _create_preflight(
+        self, motion: str, *, recovered_from: str | None = None
+    ) -> tuple[str, dict[str, Any]]:
         preflight_id = str(uuid.uuid4())
         participants = self._participant_names()
         external_prompt = ResumableProcedure.opening_prompt(motion)
@@ -128,27 +164,10 @@ class RoundtableRuntime:
             "motion": motion,
             "participants": participants,
             "external_prompt": external_prompt,
+            "recovered_from": recovered_from,
         }
         self._write_json(self._preflight_path(preflight_id), record)
-        content = (
-            "# Roundtable preflight\n\n"
-            f"**Preflight:** `{preflight_id}`  \n"
-            f"**Participants:** {', '.join(participants)}  \n"
-            "**Procedure:** openings → review pass → operator ruling if required → "
-            "additional review pass → final chair minutes\n\n"
-            "## Exact opening prompt sent to external participants\n\n"
-            f"```text\n{external_prompt}\n```\n\n"
-            "Little Oogway's memory-informed statements remain withheld from external "
-            "dockets. No external model has been contacted yet.\n\n"
-            "To begin this exact round, send:\n\n"
-            f"`/roundtable confirm {preflight_id}`"
-        )
-        return content, {
-            "mode": "preflight",
-            "preflight_id": preflight_id,
-            "participants": participants,
-            "external_models_contacted": False,
-        }
+        return self._render_preflight(record)
 
     def _load_preflight(self, preflight_id: str) -> dict[str, Any]:
         path = self._preflight_path(preflight_id)
@@ -156,6 +175,47 @@ class RoundtableRuntime:
             return json.loads(path.read_text(encoding="utf-8"))
         except FileNotFoundError as exc:
             raise ValueError(f"Unknown Roundtable preflight: {preflight_id}") from exc
+
+    def _recover_preflight(self, preflight_id: str) -> tuple[str, dict[str, Any]]:
+        record = self._load_preflight(preflight_id)
+        if record["status"] == "pending":
+            return self._render_preflight(record)
+        if record["status"] in {"completed", "recovered"}:
+            raise ValueError(f"Preflight is already {record['status']}")
+        if record["status"] == "running":
+            same_runtime = record.get("runtime_instance") == self.runtime_instance
+            lease_active = float(record.get("lease_expires_at", 0)) > time.time()
+            if same_runtime and lease_active:
+                raise ValueError("Preflight is still active in this runtime")
+        content, metadata = self._create_preflight(
+            record["motion"], recovered_from=preflight_id
+        )
+        record["status"] = "recovered"
+        record["recovery_preflight_id"] = metadata["preflight_id"]
+        record["recovered_at"] = datetime.now(timezone.utc).isoformat()
+        self._write_json(self._preflight_path(preflight_id), record)
+        return content, metadata
+
+    def _progress_callback(self, round_id: str, motion: str):
+        try:
+            self.deepseek_monitor.open_window()
+            self.deepseek_monitor.round_begin(round_id, motion)
+        except Exception:
+            pass
+
+        def progress(event: dict[str, Any]) -> None:
+            try:
+                self.deepseek_monitor.round_progress(**event)
+            except Exception:
+                pass
+
+        return progress
+
+    def _finish_progress(self, status: str) -> None:
+        try:
+            self.deepseek_monitor.round_finish(status)
+        except Exception:
+            pass
 
     def _build_participants(self) -> tuple[list[Any], Any]:
         store = TokenSpaceRepository(development_dsn())
@@ -173,6 +233,7 @@ class RoundtableRuntime:
 
         class NamedOogway:
             name = "Little Oogway"
+            retry_safe = True
 
             @staticmethod
             def respond(next_prompt: str):
@@ -216,8 +277,13 @@ class RoundtableRuntime:
         latest_pass = len(result.review_passes)
         state = json.loads(result.state_path.read_text(encoding="utf-8"))
         ledger = state["passes"][-1]["ledger"]
+        title = {
+            "awaiting_ruling": "awaiting a ruling",
+            "awaiting_chair": "awaiting chair recovery",
+            "completed": "complete",
+        }.get(result.status, result.status)
         sections = [
-            f"# Roundtable {'awaiting a ruling' if result.status == 'awaiting_ruling' else 'complete'}",
+            f"# Roundtable {title}",
             f"**Round:** `{result.round_id}`  ",
             f"**Review pass:** {latest_pass}  ",
             f"**Status:** `{result.status}`",
@@ -239,6 +305,12 @@ class RoundtableRuntime:
                 "Supply the ruling, requested fact, or clarification after this command:",
                 f"```text\n/roundtable resume {result.round_id}\nRULING OR CLARIFICATION HERE\n```",
             ))
+        elif result.status == "awaiting_chair":
+            sections.extend((
+                "## Retry only the chair",
+                "Participant turns are already preserved and will not be repeated. Send:",
+                f"`/roundtable chair {result.round_id}`",
+            ))
         return "\n\n".join(sections)
 
     def _confirm(self, preflight_id: str) -> tuple[str, dict[str, Any]]:
@@ -251,23 +323,39 @@ class RoundtableRuntime:
                 {"mode": "preflight_already_completed", "round_id": round_id},
             )
         if record["status"] != "pending":
-            raise ValueError(f"Preflight is {record['status']}; create a fresh preflight")
+            raise ValueError(
+                f"Preflight is {record['status']}; use /roundtable recover {preflight_id}"
+            )
         if record["participants"] != self._participant_names():
             raise ValueError("Participant availability changed; create a fresh preflight")
-        record["status"] = "running"
+        round_id = str(uuid.uuid4())
+        record.update({
+            "status": "running",
+            "round_id": round_id,
+            "runtime_instance": self.runtime_instance,
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "lease_expires_at": time.time() + self.preflight_lease_seconds,
+            "attempt_count": int(record.get("attempt_count", 0)) + 1,
+        })
         self._write_json(self._preflight_path(preflight_id), record)
+        progress = self._progress_callback(round_id, record["motion"])
         try:
             participants, chair = self._build_participants()
             procedure = ResumableProcedure(participants, self.transcript_directory)
-            result = procedure.start(record["motion"], chair=chair)
-        except Exception:
+            result = procedure.start(
+                record["motion"], chair=chair, progress=progress, round_id=round_id
+            )
+        except Exception as exc:
             record["status"] = "failed"
+            record["failed_at"] = datetime.now(timezone.utc).isoformat()
+            record["last_error"] = f"{type(exc).__name__}: {exc}"
             self._write_json(self._preflight_path(preflight_id), record)
+            self._finish_progress("failed")
             raise
         record["status"] = "completed"
-        record["round_id"] = result.round_id
         record["completed_at"] = datetime.now(timezone.utc).isoformat()
         self._write_json(self._preflight_path(preflight_id), record)
+        self._finish_progress(result.status)
         return self._render_result(result), {
             "mode": "resumable_procedure",
             "round_id": result.round_id,
@@ -279,15 +367,35 @@ class RoundtableRuntime:
     def _resume(self, round_id: str, ruling: str) -> tuple[str, dict[str, Any]]:
         if not ruling:
             raise ValueError("Put the ruling or clarification on the line after the resume command")
+        state_path = self.transcript_directory / "state" / f"{round_id}.json"
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        progress = self._progress_callback(round_id, state["motion"])
         participants, chair = self._build_participants()
         procedure = ResumableProcedure(participants, self.transcript_directory)
-        result = procedure.resume(round_id, ruling, chair=chair)
+        result = procedure.resume(round_id, ruling, chair=chair, progress=progress)
+        self._finish_progress(result.status)
         return self._render_result(result), {
             "mode": "resumable_procedure",
             "round_id": result.round_id,
             "status": result.status,
             "review_pass": len(result.review_passes),
             "participants": [participant.name for participant in participants],
+        }
+
+    def _retry_chair(self, round_id: str) -> tuple[str, dict[str, Any]]:
+        state_path = self.transcript_directory / "state" / f"{round_id}.json"
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        progress = self._progress_callback(round_id, state["motion"])
+        participants, chair = self._build_participants()
+        procedure = ResumableProcedure(participants, self.transcript_directory)
+        result = procedure.retry_chair(round_id, chair=chair, progress=progress)
+        self._finish_progress(result.status)
+        return self._render_result(result), {
+            "mode": "chair_recovery",
+            "round_id": result.round_id,
+            "status": result.status,
+            "review_pass": len(result.review_passes),
+            "participants_repeated": False,
         }
 
     def _status(self, round_id: str) -> tuple[str, dict[str, Any]]:
@@ -334,6 +442,10 @@ class RoundtableRuntime:
                 return self._confirm(identifier)
             if action == "resume":
                 return self._resume(identifier, body)
+            if action == "chair":
+                return self._retry_chair(identifier)
+            if action == "recover":
+                return self._recover_preflight(identifier)
             return self._status(identifier)
 
         # Preserve the existing bounded ingestion shortcut without involving an
@@ -428,6 +540,10 @@ class Handler(BaseHTTPRequestHandler):
 def main() -> int:
     host = os.getenv("ROUNDTABLE_API_HOST", "127.0.0.1")
     port = int(os.getenv("ROUNDTABLE_API_PORT", "8091"))
+    try:
+        Handler.runtime.deepseek_monitor.ensure_server()
+    except OSError as exc:
+        print(f"Roundtable monitor unavailable: {exc}", flush=True)
     print(f"Roundtable API listening at http://{host}:{port}/v1", flush=True)
     ThreadingHTTPServer((host, port), Handler).serve_forever()
     return 0

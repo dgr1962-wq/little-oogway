@@ -22,11 +22,34 @@ class FakeResponse:
             {"choices": [{"delta": {"content": "Deep"}}]},
             {"choices": [{"delta": {"reasoning_content": "private"}}]},
             {"choices": [{"delta": {"content": "Seek"}}]},
+            {"choices": [], "usage": {
+                "prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120,
+            }},
         ]
         return iter([*(f"data: {json.dumps(item)}\n".encode() for item in events), b"data: [DONE]\n"])
 
 
 class DeepSeekTests(unittest.TestCase):
+    def test_monitor_tracks_round_progress_and_ledger(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            monitor = DeepSeekMonitor(Path(directory))
+            monitor.round_begin("round-1", "Test motion")
+            monitor.round_progress(
+                phase="review_1",
+                participant="Claude",
+                status="running",
+                ledger=[{
+                    "item_id": "P1-I1", "participant": "ChatGPT",
+                    "disposition": "SUPPORT", "status": "RECORDED",
+                }],
+            )
+            snapshot = monitor.snapshot()
+            self.assertEqual(snapshot["phase"], "review_1")
+            self.assertEqual(snapshot["participant"], "Claude")
+            self.assertEqual(snapshot["ledger"][0]["disposition"], "SUPPORT")
+            monitor.round_finish("completed")
+            self.assertEqual(monitor.snapshot()["status"], "complete")
+
     @patch("roundtable.deepseek.urllib.request.urlopen", return_value=FakeResponse())
     def test_streams_visible_content_to_monitor(self, urlopen) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -37,9 +60,13 @@ class DeepSeekTests(unittest.TestCase):
             content, metadata = participant.respond("Question")
 
             self.assertEqual(content, "DeepSeek")
-            self.assertEqual(monitor.snapshot()["response"], "DeepSeek")
-            self.assertEqual(monitor.snapshot()["status"], "complete")
+            self.assertEqual(monitor.snapshot()["deepseek"]["response"], "DeepSeek")
+            self.assertEqual(monitor.snapshot()["deepseek"]["status"], "complete")
             self.assertEqual(metadata["model"], "deepseek-flash")
+            self.assertEqual(metadata["usage"]["total_tokens"], 120)
+            self.assertEqual(
+                metadata["estimated_cost_usd"], {"min": 0.000027, "max": 0.000054}
+            )
             request = urlopen.call_args.args[0]
             self.assertEqual(request.headers["Authorization"], "Bearer test-key")
 
