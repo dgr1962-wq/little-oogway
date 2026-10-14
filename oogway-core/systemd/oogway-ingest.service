@@ -1,0 +1,11 @@
+[Unit]
+Description=Little Oogway durable background ingestion worker
+After=network-online.target docker.service ollama.service
+
+[Service]
+Type=oneshot
+ExecStart=/home/darren/Documents/Little-Oogway/oogway-core/scripts/run-ingestion-worker.sh
+Nice=10
+IOSchedulingClass=idle
+CPUWeight=25
+

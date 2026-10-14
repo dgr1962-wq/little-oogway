@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "little-oogway-core"
+version = "0.1.0"
+description = "Model-neutral conversation runtime and TokenSpace persistence for Little Oogway"
+requires-python = ">=3.10"
+dependencies = ["psycopg[binary]>=3.2,<4"]
+
+[project.scripts]
+oogway-chat = "oogway_core.cli:main"
+oogway-memory = "oogway_core.memory_cli:main"
+oogway-public-retrieval = "oogway_core.public_retrieval_api:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

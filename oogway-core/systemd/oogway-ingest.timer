@@ -1,0 +1,12 @@
+[Unit]
+Description=Recover queued Little Oogway ingestion work
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=2min
+AccuracySec=15s
+Persistent=true
+Unit=oogway-ingest.service
+
+[Install]
+WantedBy=timers.target

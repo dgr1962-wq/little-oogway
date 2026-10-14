@@ -1,0 +1,15 @@
+[Unit]
+Description=Little Oogway Roundtable OpenAI-compatible API
+After=network-online.target docker.service ollama.service
+
+[Service]
+Type=simple
+EnvironmentFile=-%h/.config/little-oogway/roundtable.env
+Environment=ROUNDTABLE_VISIBLE_EXTERNALS=1
+ExecStart=/home/darren/Documents/Little-Oogway/oogway-core/scripts/run-roundtable-api.sh
+Restart=on-failure
+RestartSec=3
+Nice=5
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,19 @@
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Runtime state
+agents/chrome_profiles/
+logs/*.log
+transcripts/*.jsonl
+
+# Downloaded installers and archives
+*.deb
+*.zip
+chromedriver-linux64/
+
+# Local configuration and secrets
+.env
+*.local.yaml

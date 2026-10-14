@@ -1,0 +1,13 @@
+agents:
+  chatgpt:
+    method: selenium
+    profile: agents/chrome_profiles/chatgpt
+    url: https://chat.openai.com
+  claude:
+    method: selenium
+    profile: agents/chrome_profiles/claude
+    url: https://claude.ai
+  deepseek:
+    method: selenium
+    profile: agents/chrome_profiles/deepseek
+    url: https://chat.deepseek.com

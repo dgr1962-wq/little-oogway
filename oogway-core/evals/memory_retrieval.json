@@ -1,0 +1,64 @@
+{
+  "limit": 5,
+  "thresholds": {
+    "positive_hit_rate": 1.0,
+    "mean_reciprocal_rank": 0.8,
+    "negative_rejection_rate": 1.0,
+    "average_source_diversity": 0.6
+  },
+  "cases": [
+    {
+      "id": "lotus-point",
+      "query": "What is the Lotus Point?",
+      "expected_sources": ["data/transcripts/chatsgpt1.txt", "data/transcripts/chatsgpt4.txt", "data/transcripts/chatsgpt5.txt", "data/transcripts/chatsgpt6.txt"]
+    },
+    {
+      "id": "chicken-and-egg",
+      "query": "Why did the egg come before the chicken?",
+      "expected_sources": ["data/transcripts/chatsgpt1.txt"]
+    },
+    {
+      "id": "369-keys-primer",
+      "query": "What is the 369 Keys Primer?",
+      "expected_sources": ["data/transcripts/chatsgpt2.txt"]
+    },
+    {
+      "id": "tokenized-data-visualization",
+      "query": "How was tokenized data visualized with a scroll, clustered dots, and an attention heatmap?",
+      "expected_sources": ["data/transcripts/chatsgpt3.txt"]
+    },
+    {
+      "id": "ferrofluid-column",
+      "query": "How can I see if the center of a ferrofluid spike column is hollow?",
+      "expected_sources": ["data/transcripts/chatsgpt4.txt"]
+    },
+    {
+      "id": "shaip-training-data",
+      "query": "Shaip",
+      "expected_sources": ["data/transcripts/chatsgpt5.txt"]
+    },
+    {
+      "id": "gemini-copy-paste-bridge",
+      "query": "Conversation with Gemini: introduce another AI friend using a copy and paste bridge",
+      "expected_sources": ["data/transcripts/chatsgpt8.txt"]
+    },
+    {
+      "id": "shape-of-thought",
+      "query": "Shape of thought as Logos, Fibonacci sequence, golden spiral, and toroidal model",
+      "expected_sources": ["data/transcripts/chatsgpt9.txt"]
+    },
+    {
+      "id": "darren-phoenix-greeting",
+      "query": "Good day, my name is Darren. What came first, the phoenix or the flame?",
+      "expected_sources": ["data/transcripts/chatsgpt7.txt"]
+    },
+    {
+      "id": "negative-appliance-repair",
+      "query": "How do I replace a dishwasher drain pump?"
+    },
+    {
+      "id": "negative-weather",
+      "query": "What will the weather be in Oslo tomorrow?"
+    }
+  ]
+}

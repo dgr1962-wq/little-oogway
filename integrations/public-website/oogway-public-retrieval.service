@@ -1,0 +1,20 @@
+[Unit]
+Description=Little Oogway localhost-only public archive retrieval
+After=network-online.target ollama.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/home/darren/Documents/Little-Oogway/tokenspace/.env
+Environment=PUBLIC_RETRIEVAL_HOST=127.0.0.1
+Environment=PUBLIC_RETRIEVAL_PORT=8093
+ExecStart=/home/darren/Documents/Little-Oogway/oogway-core/scripts/run-public-retrieval.sh
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+
+[Install]
+WantedBy=default.target
