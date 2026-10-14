@@ -78,6 +78,11 @@ class ResumableProcedure:
         names = [participant.name for participant in self.participants]
         if len(set(names)) != len(names):
             raise ValueError("Participant names must be unique")
+        self.private_participants = frozenset(
+            participant.name
+            for participant in self.participants
+            if getattr(participant, "kind", None) == "oogway-core"
+        )
         self.transcript_directory = Path(transcript_directory)
         self.state_directory = self.transcript_directory / "state"
 
@@ -107,7 +112,11 @@ class ResumableProcedure:
             content=None,
             error=errors[-1],
             duration_ms=round((time.perf_counter() - started) * 1000),
-            metadata={"attempt_count": max_attempts, "attempt_errors": errors},
+            metadata={
+                "kind": getattr(participant, "kind", "unknown"),
+                "attempt_count": max_attempts,
+                "attempt_errors": errors,
+            },
         )
 
     @staticmethod
@@ -118,13 +127,18 @@ class ResumableProcedure:
     def _result_from_dict(value: dict[str, Any]) -> ParticipantResult:
         return ParticipantResult(**value)
 
-    @staticmethod
-    def _is_private(result: ParticipantResult) -> bool:
-        return result.metadata.get("kind") == "oogway-core"
+    def _is_private(self, result: ParticipantResult) -> bool:
+        # Seat identity is authoritative even when a failed/legacy result has
+        # missing or malformed metadata.  Metadata remains a compatibility
+        # signal for older state files, but can never make a configured private
+        # seat public.
+        return (
+            result.participant in self.private_participants
+            or result.metadata.get("kind") == "oogway-core"
+        )
 
-    @classmethod
     def _docket(
-        cls,
+        self,
         results: Iterable[ParticipantResult],
         *,
         redact_private: bool = False,
@@ -132,7 +146,7 @@ class ResumableProcedure:
     ) -> str:
         sections: list[str] = []
         for result in results:
-            if redact_private and cls._is_private(result):
+            if redact_private and self._is_private(result):
                 body = "[Withheld from external docket: local memory-informed statement]"
             else:
                 body = result.content if result.succeeded else f"Unavailable: {result.error}"
@@ -145,11 +159,57 @@ class ResumableProcedure:
     def _disposition(result: ParticipantResult) -> str:
         if not result.succeeded or not result.content:
             return "UNAVAILABLE"
-        normalized = re.sub(r"^[\s*#:_-]+", "", result.content).upper()
+        first_line = next(
+            (line.strip() for line in result.content.splitlines() if line.strip()), ""
+        )
+        normalized = re.sub(r"^[\s*#]+", "", first_line.upper())
+        normalized = re.sub(r"[\s*]+$", "", normalized)
         normalized = re.sub(r"^DISPOSITION\s*:\s*", "", normalized)
-        return next(
-            (disposition for disposition in DISPOSITIONS if normalized.startswith(disposition)),
-            "UNCLASSIFIED",
+        alternatives = "|".join(re.escape(value) for value in DISPOSITIONS)
+        found = set(re.findall(rf"(?<![A-Z])({alternatives})(?![A-Z])", normalized))
+        leading = re.match(rf"^({alternatives})(?![A-Z])", normalized)
+        if leading is None or found != {leading.group(1)}:
+            return "UNCLASSIFIED"
+        return leading.group(1)
+
+    @staticmethod
+    def _required_chair_disposition(
+        ledger: list[dict[str, Any]], target_status: str
+    ) -> str:
+        if target_status == "awaiting_ruling":
+            return "DEFERRED"
+        return (
+            "CONSENSUS"
+            if all(entry["disposition"] == "SUPPORT" for entry in ledger)
+            else "MIXED"
+        )
+
+    @classmethod
+    def _validate_chair_report(
+        cls,
+        result: ParticipantResult,
+        *,
+        ledger: list[dict[str, Any]],
+        target_status: str,
+    ) -> ParticipantResult:
+        if not result.succeeded or not result.content:
+            return result
+        expected = cls._required_chair_disposition(ledger, target_status)
+        first_line = next(
+            (line.strip() for line in result.content.splitlines() if line.strip()), ""
+        )
+        normalized = re.sub(r"^[\s*#]+", "", first_line.upper())
+        normalized = re.sub(r"[\s*]+$", "", normalized)
+        match = re.fullmatch(r"DISPOSITION\s*:\s*(CONSENSUS|MIXED|DEFERRED)", normalized)
+        actual = match.group(1) if match else "INVALID"
+        if actual == expected:
+            return result
+        return ParticipantResult(
+            participant=result.participant,
+            content=result.content,
+            error=f"Chair disposition mismatch: expected {expected}, received {actual}",
+            duration_ms=result.duration_ms,
+            metadata={**result.metadata, "required_disposition": expected},
         )
 
     @classmethod
@@ -349,7 +409,11 @@ class ResumableProcedure:
             review_pass=latest["number"],
         )
         self._notify(progress, phase="chair_retry", participant=chair.name, status="running")
-        chair_report = self._call(chair, chair_prompt)
+        chair_report = self._validate_chair_report(
+            self._call(chair, chair_prompt),
+            ledger=ledger,
+            target_status=target_status,
+        )
         status = target_status if chair_report.succeeded else "awaiting_chair"
         transcript.write(
             "chair_report",
@@ -469,8 +533,9 @@ class ResumableProcedure:
                 f"Opening statements:\n\n{opening_docket}\n\n"
                 f"Earlier review record:\n\n{history}\n\n"
                 f"Operator ruling or supplied clarification:\n{ruling_text}\n\n"
-                "Begin with exactly one disposition: SUPPORT, OBJECTION, AMENDMENT, "
-                "REQUEST FOR CLARIFICATION, POINT OF ORDER, or PASS. An AMENDMENT must "
+                "Your first nonempty line must be exactly `Disposition: LABEL`, where LABEL "
+                "is SUPPORT, OBJECTION, AMENDMENT, REQUEST FOR CLARIFICATION, POINT OF ORDER, "
+                "or PASS. Begin explanation on the next line. An AMENDMENT must "
                 "include exact proposed language. A clarification request must identify the "
                 "question and who should answer it. A point of order must identify the process "
                 "defect and requested remedy. Do not repeat a resolved intervention merely to "
@@ -518,7 +583,11 @@ class ResumableProcedure:
             target_status=target_status,
         )
         self._notify(progress, phase="chair", participant=chair.name, status="running")
-        chair_report = self._call(chair, chair_prompt)
+        chair_report = self._validate_chair_report(
+            self._call(chair, chair_prompt),
+            ledger=ledger,
+            target_status=target_status,
+        )
         status = target_status if chair_report.succeeded else "awaiting_chair"
         transcript.write(
             "chair_report",
@@ -564,20 +633,19 @@ class ResumableProcedure:
             for entry in ledger
         )
         review_docket = self._docket(reviews)
+        required_disposition = self._required_chair_disposition(ledger, target_status)
         if target_status == "awaiting_ruling":
             chair_instruction = (
-                "Produce an INTERIM PROCEDURAL REPORT. The disposition must be DEFERRED. "
+                "Produce an INTERIM PROCEDURAL REPORT. Your first nonempty line must be "
+                "exactly `Disposition: DEFERRED`. "
                 "List every open item by its item ID, explain what ruling, answer, or exact "
                 "motion text is needed, and preserve all objections. Do not adopt an amendment, "
                 "answer a clarification request for someone else, or invent a ruling."
             )
         else:
-            unanimous_support = all(
-                entry["disposition"] == "SUPPORT" for entry in ledger
-            )
-            required_disposition = "CONSENSUS" if unanimous_support else "MIXED"
             chair_instruction = (
-                "Produce FINAL MINUTES under these headings: Disposition; Controlling motion "
+                f"Your first nonempty line must be exactly `Disposition: {required_disposition}`. "
+                "Then produce FINAL MINUTES under these headings: Controlling motion "
                 "or recommendation; Agreements; Objections "
                 "and minority views; Resolved procedural history; Unresolved factual questions; "
                 "Action items. Do not invent votes, owners, dates, deadlines, tests, or completed "

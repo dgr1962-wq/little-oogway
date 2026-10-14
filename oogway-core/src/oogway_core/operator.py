@@ -11,37 +11,32 @@ from .operator_store import OperatorAction, OperatorStore
 
 
 MAX_OUTPUT = 64_000
+MAX_PENDING_ACTIONS = 20
 DEFAULT_ROOTS = (Path("/home/darren"), Path("/mnt/storage"))
 BLOCKED_PARTS = {
     ".ssh", ".gnupg", "chrome_profiles", ".little-oogway-website",
     "google-chrome", "keyrings",
 }
-BLOCKED_NAMES = {".env", ".nomic-token", "roundtable.env", "website-guide.env"}
-BLOCKED_EXECUTABLES = {
-    "sudo", "su", "pkexec", "rm", "rmdir", "shred", "mkfs", "fdisk",
-    "parted", "dd", "mount", "umount", "reboot", "shutdown", "poweroff",
-    "bash", "sh", "zsh", "fish",
+BLOCKED_NAMES = {
+    ".env", ".nomic-token", "operator.token", "roundtable.env", "website-guide.env"
 }
-PRIVILEGED_EXECUTABLES = {
-    "/usr/bin/apt",
-    "/usr/bin/apt-get",
-    "/usr/bin/chmod",
-    "/usr/bin/chown",
+ALLOWED_COMMANDS = {
     "/usr/bin/cp",
-    "/usr/bin/install",
-    "/usr/bin/journalctl",
-    "/usr/bin/ln",
-    "/usr/bin/loginctl",
     "/usr/bin/mkdir",
-    "/usr/bin/mount",
     "/usr/bin/mv",
-    "/usr/bin/systemctl",
-    "/usr/bin/umount",
-    "/usr/sbin/groupmod",
-    "/usr/sbin/mount",
-    "/usr/sbin/ufw",
-    "/usr/sbin/umount",
-    "/usr/sbin/usermod",
+    "/usr/bin/touch",
+}
+
+# Privileged operations require operation-specific argument profiles.  Keeping
+# this empty is intentional: allowing a powerful executable such as apt,
+# systemctl, cp, or chmod with arbitrary arguments is equivalent to allowing a
+# root shell even when PolicyKit still asks a human for a password.
+PRIVILEGED_COMMANDS: frozenset[str] = frozenset()
+MINIMAL_COMMAND_ENV = {
+    "HOME": "/home/darren",
+    "LANG": "C.UTF-8",
+    "LC_ALL": "C.UTF-8",
+    "PATH": "/usr/bin:/bin",
 }
 
 
@@ -133,7 +128,10 @@ class OperatorRuntime:
         target = self.policy.resolve(root)
         if not query.strip() or len(query) > 500:
             raise ValueError("query must contain 1-500 characters")
-        argv = ["grep", "-RInF", "--binary-files=without-match", "--exclude=.env", "--exclude-dir=.git"]
+        argv = ["grep", "-rInF", "--binary-files=without-match", "--exclude-dir=.git"]
+        for name in sorted(BLOCKED_NAMES):
+            argv.append(f"--exclude={name}")
+        argv.append("--exclude=.env*")
         for part in BLOCKED_PARTS:
             argv.append(f"--exclude-dir={part}")
         argv.extend(["--", query, str(target)])
@@ -150,6 +148,58 @@ class OperatorRuntime:
             "limited": len(all_lines) > result_limit,
         }
 
+    def _enforce_pending_limit(self) -> None:
+        if len(self.store.list(status="pending", limit=MAX_PENDING_ACTIONS + 1)) >= MAX_PENDING_ACTIONS:
+            raise RuntimeError(
+                "the operator queue already has the maximum number of pending actions"
+            )
+
+    def _path_argument(self, value: str, *, allow_missing: bool = False) -> str:
+        if not value or value.startswith("-"):
+            raise PermissionError("command path arguments must be explicit paths")
+        return str(self.policy.resolve(value, allow_missing=allow_missing))
+
+    def _validated_command(
+        self, executable: str, arguments: Sequence[str]
+    ) -> tuple[str, list[str]]:
+        try:
+            resolved = str(Path(executable).resolve(strict=True))
+        except (OSError, RuntimeError) as exc:
+            raise PermissionError("command executable does not exist") from exc
+        if resolved not in ALLOWED_COMMANDS:
+            raise PermissionError(
+                "command is not in the path-aware operator allowlist"
+            )
+        values = [str(item) for item in arguments]
+        if resolved == "/usr/bin/mkdir":
+            flags = [item for item in values if item.startswith("-")]
+            operands = [item for item in values if not item.startswith("-")]
+            if any(item != "-p" for item in flags) or not operands:
+                raise PermissionError("mkdir permits only -p and approved destination paths")
+            values = flags + [self._path_argument(item, allow_missing=True) for item in operands]
+        elif resolved == "/usr/bin/touch":
+            if not values or any(item.startswith("-") for item in values):
+                raise PermissionError("touch permits only approved destination paths")
+            values = [self._path_argument(item, allow_missing=True) for item in values]
+        elif resolved == "/usr/bin/mv":
+            if len(values) != 2 or any(item.startswith("-") for item in values):
+                raise PermissionError("mv requires exactly two approved paths")
+            values = [
+                self._path_argument(values[0]),
+                self._path_argument(values[1], allow_missing=True),
+            ]
+        elif resolved == "/usr/bin/cp":
+            flags = [item for item in values if item.startswith("-")]
+            operands = [item for item in values if not item.startswith("-")]
+            if any(item not in {"-a", "-p", "-r", "-R"} for item in flags) or len(operands) < 2:
+                raise PermissionError(
+                    "cp permits only -a/-p/-r/-R and approved source/destination paths"
+                )
+            checked = [self._path_argument(item) for item in operands[:-1]]
+            checked.append(self._path_argument(operands[-1], allow_missing=True))
+            values = flags + checked
+        return resolved, values
+
     def propose_command(
         self,
         executable: str,
@@ -158,15 +208,14 @@ class OperatorRuntime:
         reason: str,
         requested_by: str = "little-oogway",
     ) -> OperatorAction:
-        program = Path(executable).name
-        if program in BLOCKED_EXECUTABLES:
-            raise PermissionError(f"{program} requires the future privileged broker")
+        resolved, checked_arguments = self._validated_command(executable, arguments)
         workdir = self.policy.resolve(cwd)
         if not workdir.is_dir():
             raise ValueError("working directory is not a directory")
-        argv = [executable, *[str(item) for item in arguments]]
+        argv = [resolved, *checked_arguments]
         if len(argv) > 100 or sum(map(len, argv)) > 20_000:
             raise ValueError("command exceeds the structured argument limit")
+        self._enforce_pending_limit()
         return self.store.propose(
             action_type="command",
             risk_level="yellow",
@@ -184,28 +233,9 @@ class OperatorRuntime:
         reason: str,
         requested_by: str = "little-oogway",
     ) -> OperatorAction:
-        resolved = str(Path(executable).resolve(strict=True))
-        if resolved not in PRIVILEGED_EXECUTABLES:
-            raise PermissionError("executable is not in the reviewed administrative allowlist")
-        workdir = self.policy.resolve(cwd)
-        if not workdir.is_dir():
-            raise ValueError("working directory is not a directory")
-        argv = [resolved, *[str(item) for item in arguments]]
-        if len(argv) > 100 or sum(map(len, argv)) > 20_000:
-            raise ValueError("command exceeds the structured argument limit")
-        return self.store.propose(
-            action_type="command",
-            risk_level="red",
-            arguments={
-                "argv": argv,
-                "cwd": str(workdir),
-                "timeout": 900,
-                "privileged": True,
-                "authentication": "graphical-policykit",
-            },
-            reason=reason.strip() or "Little Oogway requested an administrative command",
-            requested_by=requested_by,
-            requested_via="private-open-webui",
+        del executable, arguments, cwd, reason, requested_by
+        raise PermissionError(
+            "no privileged operation has an argument-safe broker profile yet"
         )
 
     def execute_approved(self, action_id: str) -> OperatorAction:
@@ -243,30 +273,21 @@ class OperatorRuntime:
         argv = action.arguments.get("argv")
         if not isinstance(argv, list) or not argv or not all(isinstance(item, str) for item in argv):
             raise ValueError("stored command arguments are invalid")
-        if Path(argv[0]).name in BLOCKED_EXECUTABLES:
-            raise PermissionError("stored executable is blocked")
+        resolved, checked_arguments = self._validated_command(argv[0], argv[1:])
+        if [resolved, *checked_arguments] != argv:
+            raise PermissionError("stored command no longer satisfies the operator policy")
         cwd = self.policy.resolve(str(action.arguments.get("cwd", "")))
         timeout = min(max(int(action.arguments.get("timeout", 120)), 1), 900)
         execution_argv = argv
         if action.risk_level == "red":
-            if action.arguments.get("privileged") is not True:
-                raise PermissionError("red-risk action lacks its privileged marker")
-            resolved = str(Path(argv[0]).resolve(strict=True))
-            if resolved not in PRIVILEGED_EXECUTABLES:
-                raise PermissionError("stored executable is not administratively allowed")
-            execution_argv = [
-                "/usr/bin/pkexec",
-                "--disable-internal-agent",
-                "--user",
-                "root",
-                *argv,
-            ]
+            raise PermissionError("privileged operator execution is disabled pending a safe profile")
         completed = subprocess.run(
             execution_argv,
             cwd=cwd,
             capture_output=True,
             text=True,
             timeout=timeout,
+            env=MINIMAL_COMMAND_ENV,
         )
         stdout, stdout_truncated = _trim(completed.stdout)
         stderr, stderr_truncated = _trim(completed.stderr)

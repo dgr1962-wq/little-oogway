@@ -78,6 +78,18 @@ class DeepSeekTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "DEEPSEEK_API_KEY"):
                 participant.respond("Question")
 
+    def test_null_prompt_token_details_do_not_discard_usage(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            participant = DeepSeekParticipant(
+                api_key="test", monitor=DeepSeekMonitor(Path(directory))
+            )
+            cost = participant._estimated_cost({
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "prompt_tokens_details": None,
+            })
+            self.assertEqual(cost, {"min": 0.000027, "max": 0.000054})
+
 
 if __name__ == "__main__":
     unittest.main()

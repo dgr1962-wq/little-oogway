@@ -194,9 +194,10 @@ class DeepSeekParticipant:
             miss_low, miss_high = 0.15, 0.30
             output_low, output_high = 0.60, 1.20
             prompt_tokens = int(usage.get("prompt_tokens") or 0)
+            prompt_details = usage.get("prompt_tokens_details") or {}
             hit_tokens = int(
                 usage.get("prompt_cache_hit_tokens")
-                or usage.get("prompt_tokens_details", {}).get("cached_tokens")
+                or prompt_details.get("cached_tokens")
                 or 0
             )
             miss_tokens = int(
@@ -269,7 +270,11 @@ class DeepSeekParticipant:
         if not content:
             self.monitor.fail("DeepSeek returned no response content")
             raise RuntimeError("DeepSeek returned no response content")
-        estimated_cost = self._estimated_cost(usage)
+        try:
+            estimated_cost = self._estimated_cost(usage)
+        except (AttributeError, TypeError, ValueError) as exc:
+            estimated_cost = None
+            usage["cost_estimate_error"] = f"{type(exc).__name__}: {exc}"
         self.monitor.complete(usage, estimated_cost)
         return content, {
             "kind": "api",

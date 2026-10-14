@@ -192,8 +192,10 @@ The operator service listens only on `127.0.0.1:8094`. Read-only inspection is
 available immediately, while commands are written to the TokenSpace
 `operator_actions` audit ledger and remain pending until a local administrator
 approves them in the loopback approval console. Commands use structured argument
-arrays rather than shell text, and credential locations, shells, destructive
-utilities, and privilege-escalation entry points are blocked.
+arrays rather than shell text. The operator permits only path-aware `mkdir`,
+`touch`, `cp`, and `mv` operations inside approved roots, revalidates stored
+arguments immediately before execution, and supplies a minimal environment with
+no database credentials. Everything else fails closed.
 
 Install the user service on Little Oogway with:
 
@@ -206,12 +208,13 @@ systemctl --user daemon-reload
 systemctl --user enable --now oogway-operator.service
 ```
 
-This service normally runs as `darren` and holds no root credential. A red-risk
-administrative request is limited to a reviewed executable allowlist,
-recorded in the same ledger, and launched through PolicyKit only after local
-approval. PolicyKit then requires graphical administrator authentication for
-that specific operation. The model never receives a password, unrestricted
-sudo, or a root shell.
+This service normally runs as `darren`, holds no root credential, and uses
+systemd hardening. The dashboard requires the private operator token once to
+create an eight-hour localhost session; its CSRF value is separate from that
+token. Privileged execution currently fails closed. Future administrative
+operations must receive operation-specific argument profiles before they can be
+enabled; executable-name allowlisting and generic PolicyKit approval are not
+accepted as a root boundary.
 
 ### Public website retrieval
 
@@ -237,4 +240,4 @@ Runtime validation on October 13, 2026 completed real `qwen3:8b` conversations t
 
 ## Current scope
 
-The legacy 155 GB bulk-ingestion database is frozen and intentionally excluded from the runtime. Core uses only TokenSpace v2, the nine deliberately imported historical transcripts, and conversations created through the new runtime. Imported text remains historical, untrusted, retrieval-only context. The bounded user-level operator and TokenSpace approval ledger are in place. Privileged maintenance is a separate red-risk tier requiring both ledger approval and per-operation graphical PolicyKit authentication.
+The legacy 155 GB bulk-ingestion database is frozen and intentionally excluded from the runtime. Core uses only TokenSpace v2, the nine deliberately imported historical transcripts, and conversations created through the new runtime. Imported text remains historical, untrusted, retrieval-only context. The bounded user-level operator and TokenSpace approval ledger are in place. Privileged maintenance remains disabled until narrowly defined operations receive argument-level broker profiles.

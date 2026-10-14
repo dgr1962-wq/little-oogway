@@ -183,10 +183,9 @@ class RoundtableRuntime:
         if record["status"] in {"completed", "recovered"}:
             raise ValueError(f"Preflight is already {record['status']}")
         if record["status"] == "running":
-            same_runtime = record.get("runtime_instance") == self.runtime_instance
             lease_active = float(record.get("lease_expires_at", 0)) > time.time()
-            if same_runtime and lease_active:
-                raise ValueError("Preflight is still active in this runtime")
+            if lease_active:
+                raise ValueError("Preflight still has an active execution lease")
         content, metadata = self._create_preflight(
             record["motion"], recovered_from=preflight_id
         )

@@ -52,9 +52,9 @@ class ProcedureTests(unittest.TestCase):
                 [
                     "Opening from local memory",
                     "SUPPORT — accept the motion",
-                    "DEFERRED — P1-I2 requires an operator ruling",
-                    "SUPPORT — the ruling resolves the amendment",
-                    "CONSENSUS — final minutes",
+                    "Disposition: DEFERRED\nP1-I2 requires an operator ruling",
+                    "Disposition: SUPPORT\nThe ruling resolves the amendment",
+                    "Disposition: CONSENSUS\nFinal minutes",
                 ],
                 kind="oogway-core",
             )
@@ -63,7 +63,7 @@ class ProcedureTests(unittest.TestCase):
                 [
                     "Peer opening",
                     "AMENDMENT — replace the final sentence with safer text",
-                    "SUPPORT — the operator adopted the safer text",
+                    "Disposition: SUPPORT\nThe operator adopted the safer text",
                 ],
             )
             procedure = ResumableProcedure([chair, peer], transcript_directory=directory)
@@ -142,11 +142,27 @@ class ProcedureTests(unittest.TestCase):
         self.assertEqual(ledger[0]["disposition"], "AMENDMENT")
         self.assertTrue(ledger[0]["requires_ruling"])
 
+    def test_ambiguous_or_prefix_dispositions_are_unclassified(self) -> None:
+        for content in (
+            "SUPPORT, but I have a fundamental OBJECTION",
+            "SUPPORTING ARGUMENTS AGAINST THE MOTION",
+            "PASSIONATELY OPPOSED",
+        ):
+            with self.subTest(content=content):
+                result = type("Result", (), {
+                    "participant": "one", "content": content,
+                    "error": None, "succeeded": True,
+                })()
+                self.assertEqual(
+                    ResumableProcedure._ledger([result], 1)[0]["disposition"],
+                    "UNCLASSIFIED",
+                )
+
     def test_objection_forces_mixed_final_minutes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             chair = ScriptedParticipant(
                 "Chair",
-                ["Opening", "SUPPORT — yes", "MIXED — final minutes"],
+                ["Opening", "SUPPORT — yes", "Disposition: MIXED\nFinal minutes"],
             )
             peer = ScriptedParticipant("Peer", ["Opening", "OBJECTION — dissent"])
             result = ResumableProcedure(
@@ -160,7 +176,7 @@ class ProcedureTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             chair = ScriptedParticipant(
                 "Chair",
-                ["Opening", "SUPPORT — yes", "CONSENSUS — final"],
+                ["Opening", "SUPPORT — yes", "Disposition: CONSENSUS\nFinal"],
             )
             procedure = ResumableProcedure([chair], transcript_directory=directory)
             result = procedure.start("A complete motion", chair=chair)
@@ -176,7 +192,7 @@ class ProcedureTests(unittest.TestCase):
                     "Opening",
                     "SUPPORT — yes",
                     RuntimeError("chair unavailable"),
-                    "CONSENSUS — recovered minutes",
+                    "Disposition: CONSENSUS\nRecovered minutes",
                 ],
             )
             peer = ScriptedParticipant("Peer", ["Opening", "SUPPORT — yes"])
@@ -195,11 +211,48 @@ class ProcedureTests(unittest.TestCase):
             ]
             self.assertEqual(sum(event["event"] == "chair_retry" for event in events), 1)
 
+    def test_chair_disposition_mismatch_requires_chair_retry(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            chair = ScriptedParticipant(
+                "Chair",
+                [
+                    "Opening",
+                    "SUPPORT — yes",
+                    "Disposition: CONSENSUS\nIncorrect minutes",
+                    "Disposition: MIXED\nCorrected minutes",
+                ],
+            )
+            peer = ScriptedParticipant("Peer", ["Opening", "OBJECTION — dissent"])
+            procedure = ResumableProcedure([chair, peer], transcript_directory=directory)
+            first = procedure.start("A contested motion", chair=chair)
+            self.assertEqual(first.status, "awaiting_chair")
+            self.assertIn("expected MIXED", first.chair.error)
+            recovered = procedure.retry_chair(first.round_id, chair=chair)
+            self.assertEqual(recovered.status, "completed")
+
+    def test_failed_private_seat_is_redacted_by_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            private = ScriptedParticipant(
+                "Little Oogway",
+                [RuntimeError("postgresql://private-secret@localhost/db")],
+                kind="oogway-core",
+            )
+            peer = ScriptedParticipant("Peer", [])
+            procedure = ResumableProcedure([private, peer], transcript_directory=directory)
+            failed = procedure._call(private, "Opening")
+            docket = procedure._docket([failed], redact_private=True)
+            self.assertIn("Withheld from external docket", docket)
+            self.assertNotIn("private-secret", docket)
+
     def test_saved_round_rejects_different_participant_roster(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             chair = ScriptedParticipant(
                 "Chair",
-                ["Opening", "AMENDMENT — revise", "DEFERRED — ruling needed"],
+                [
+                    "Opening",
+                    "AMENDMENT — revise",
+                    "Disposition: DEFERRED\nRuling needed",
+                ],
             )
             result = ResumableProcedure([chair], transcript_directory=directory).start(
                 "A motion", chair=chair

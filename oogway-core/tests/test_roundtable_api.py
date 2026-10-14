@@ -54,7 +54,7 @@ class RoundtableApiTests(unittest.TestCase):
             ("recover", identifier, ""),
         )
 
-    def test_orphaned_preflight_recovers_to_fresh_confirmation(self):
+    def test_active_preflight_lease_cannot_be_recovered_by_other_runtime(self):
         with tempfile.TemporaryDirectory() as directory:
             runtime = RoundtableRuntime()
             runtime.transcript_directory = Path(directory)
@@ -66,6 +66,24 @@ class RoundtableApiTests(unittest.TestCase):
                 "status": "running",
                 "runtime_instance": "dead-runtime",
                 "lease_expires_at": 9999999999,
+            })
+            runtime._write_json(runtime._preflight_path(old_id), record)
+
+            with self.assertRaisesRegex(ValueError, "active execution lease"):
+                runtime._recover_preflight(old_id)
+
+    def test_expired_preflight_recovers_to_fresh_confirmation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = RoundtableRuntime()
+            runtime.transcript_directory = Path(directory)
+            runtime.preflight_directory = Path(directory, "preflight")
+            _, created = runtime._create_preflight("Test recovery")
+            old_id = created["preflight_id"]
+            record = runtime._load_preflight(old_id)
+            record.update({
+                "status": "running",
+                "runtime_instance": "dead-runtime",
+                "lease_expires_at": 0,
             })
             runtime._write_json(runtime._preflight_path(old_id), record)
 

@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from oogway_core.operator import PathPolicy
 from oogway_core.tools import AbsorbSourceTool
 
 
@@ -38,11 +39,21 @@ class AbsorbSourceToolTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder, "notes with spaces.txt")
             path.write_text("memory", encoding="utf-8")
-            result = AbsorbSourceTool(queue, autostart=False).try_execute(
+            result = AbsorbSourceTool(
+                queue, autostart=False, path_policy=PathPolicy((Path(folder),))
+            ).try_execute(
                 f'Absorb "{path}"'
             )
         self.assertEqual(result.metadata["status"], "queued")
         self.assertEqual(queue.calls[0]["source_locator"], str(path.resolve()))
+
+    def test_rejects_local_source_outside_approved_roots(self):
+        queue = FakeQueue()
+        result = AbsorbSourceTool(queue, autostart=False).try_execute(
+            "Absorb /etc/passwd"
+        )
+        self.assertEqual(result.metadata["status"], "rejected")
+        self.assertEqual(queue.calls, [])
 
     def test_rejects_unapproved_remote_host_without_queueing(self):
         queue = FakeQueue()

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from .ingestion import classify_locator, validate_url
+from .operator import PathPolicy
 
 
 URL_RE = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
@@ -68,6 +69,7 @@ def _source_candidates(prompt: str) -> list[str]:
 class AbsorbSourceTool:
     queue: IngestionQueue
     autostart: bool = True
+    path_policy: PathPolicy = field(default_factory=PathPolicy)
     name: str = "absorb_source"
 
     @staticmethod
@@ -101,6 +103,8 @@ class AbsorbSourceTool:
             kind, locator = classify_locator(requested)
             if kind == "url":
                 validate_url(locator)
+            else:
+                locator = str(self.path_policy.resolve(locator))
             job_id, created = self.queue.enqueue_ingestion_job(
                 source_kind=kind,
                 source_locator=locator,

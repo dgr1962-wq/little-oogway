@@ -28,18 +28,23 @@ identifiers, and excludes local files and conversations.
 
 - Machine tools exist only in the private Open WebUI administrative session.
 - The public website and Roundtable API do not load or proxy operator tools.
-- The operator API binds to loopback and requires a local bearer token for its
-  programmatic endpoints.
+- The operator API binds to loopback, rejects unexpected Host, Origin, and
+  cross-site browser requests, and requires a bearer token for programmatic
+  endpoints. The approval dashboard requires a short-lived authenticated
+  session with a distinct CSRF token; it never embeds the bearer token.
 - Read access is limited to `/home/darren` and `/mnt/storage`, excluding known
   credential and browser-profile locations.
 - Mutating commands are proposals first. Approval and execution state is kept in
   the TokenSpace `operator_actions` audit ledger.
-- Commands are structured argument arrays; shells, destructive utilities, and
-  privilege-escalation programs are denied.
-- The service itself remains user-level and holds no root credential. Reviewed
-  administrative executables can be proposed as red-risk actions, but
-  execution additionally requires graphical PolicyKit authentication for that
-  exact operation. Passwords are never provided to the model or stored.
+- Commands are structured argument arrays and use a small path-aware allowlist
+  (`mkdir`, `touch`, `cp`, and `mv`). Every file operand is revalidated at both
+  proposal and execution time. All other executables fail closed.
+- Executed commands receive a minimal environment with no TokenSpace or
+  PostgreSQL credentials. The service itself is systemd-hardened and remains
+  user-level. Privileged execution is disabled until individual administrative
+  operations have argument-level broker profiles; an executable name alone is
+  never treated as a sufficient root boundary.
+- Pending proposals are bounded to reduce approval-fatigue attacks.
 
 ## Operational safety
 

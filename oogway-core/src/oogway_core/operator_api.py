@@ -5,6 +5,10 @@ import hmac
 import html
 import json
 import os
+import secrets
+import threading
+import time
+from http.cookies import SimpleCookie
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -21,11 +25,26 @@ TOKEN_FILE = Path.home() / ".config/little-oogway/operator.token"
 def load_token() -> str:
     value = os.getenv("OOGWAY_OPERATOR_TOKEN")
     if value:
-        return value.strip()
+        token = value.strip()
+        if len(token) < 32:
+            raise ValueError("operator token is missing or too short")
+        return token
     token = TOKEN_FILE.read_text(encoding="utf-8").strip()
     if len(token) < 32:
         raise ValueError("operator token is missing or too short")
     return token
+
+
+def login_page(error: str = "") -> bytes:
+    warning = f"<p class=\"error\">{html.escape(error)}</p>" if error else ""
+    return f"""<!doctype html><html><head><meta charset=\"utf-8\">
+<meta name=\"viewport\" content=\"width=device-width\"><title>Operator sign in</title>
+<style>body{{background:#111827;color:#e5e7eb;font:16px system-ui}}main{{max-width:520px;margin:10vh auto;padding:24px}}
+input,button{{box-sizing:border-box;width:100%;padding:12px;margin:8px 0;border-radius:8px}}.error{{color:#fca5a5}}</style>
+</head><body><main><h1>Little Oogway Operator</h1>{warning}
+<p>Enter the private operator token to open an eight-hour localhost session.</p>
+<form method=\"post\" action=\"/login\"><input type=\"password\" name=\"token\" autocomplete=\"current-password\" required>
+<button>Sign in</button></form></main></body></html>""".encode()
 
 
 def dashboard(actions: list[dict], csrf: str) -> bytes:
@@ -76,6 +95,8 @@ span{{padding:3px 8px;border-radius:999px;background:#374151}} .complete{{backgr
 class OperatorHandler(BaseHTTPRequestHandler):
     runtime: OperatorRuntime
     token: str
+    sessions: dict[str, tuple[str, float]] = {}
+    sessions_lock = threading.Lock()
     server_version = "LittleOogwayOperator/0.1"
 
     def log_message(self, format: str, *args: object) -> None:
@@ -94,6 +115,54 @@ class OperatorHandler(BaseHTTPRequestHandler):
         expected = f"Bearer {self.token}"
         return hmac.compare_digest(supplied, expected)
 
+    def _request_context_valid(self) -> bool:
+        port = int(self.server.server_address[1])
+        allowed = {f"127.0.0.1:{port}", f"localhost:{port}", f"[::1]:{port}"}
+        if self.headers.get("Host", "") not in allowed:
+            return False
+        if self.headers.get("Sec-Fetch-Site", "").lower() == "cross-site":
+            return False
+        origin = self.headers.get("Origin")
+        if origin:
+            parsed = urlsplit(origin)
+            if parsed.scheme != "http" or parsed.netloc not in allowed:
+                return False
+        return True
+
+    def _session(self) -> tuple[str, str] | None:
+        cookie = SimpleCookie(self.headers.get("Cookie", ""))
+        morsel = cookie.get("oogway_operator_session")
+        if morsel is None:
+            return None
+        session_id = morsel.value
+        with self.sessions_lock:
+            value = self.sessions.get(session_id)
+            if value is None:
+                return None
+            csrf, expires_at = value
+            if expires_at <= time.time():
+                self.sessions.pop(session_id, None)
+                return None
+        return session_id, csrf
+
+    def _html(self, status: int, body: bytes) -> None:
+        self.send_response(status)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _redirect(self, location: str, *, cookie: str | None = None) -> None:
+        self.send_response(303)
+        self.send_header("Location", location)
+        if cookie:
+            self.send_header("Set-Cookie", cookie)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def _body(self) -> dict:
         length = min(int(self.headers.get("Content-Length", "0")), 1_000_000)
         if length <= 0:
@@ -101,19 +170,28 @@ class OperatorHandler(BaseHTTPRequestHandler):
         return json.loads(self.rfile.read(length).decode())
 
     def do_GET(self) -> None:
+        if not self._request_context_valid():
+            self._json(403, {"error": "invalid localhost request context"})
+            return
         parsed = urlsplit(self.path)
         query = parse_qs(parsed.query)
         if parsed.path == "/health":
             self._json(200, {"ok": True, "service": "little-oogway-operator"})
             return
         if parsed.path == "/":
+            session = self._session()
+            if session is None:
+                self._redirect("/login")
+                return
             actions = [action_dict(item) for item in self.runtime.store.list(limit=50)]
-            body = dashboard(actions, self.token)
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
+            body = dashboard(actions, session[1])
+            self._html(200, body)
+            return
+        if parsed.path == "/login":
+            if self._session() is not None:
+                self._redirect("/")
+                return
+            self._html(200, login_page())
             return
         if not self._authorized():
             self._json(401, {"error": "operator bearer token required"})
@@ -141,12 +219,36 @@ class OperatorHandler(BaseHTTPRequestHandler):
         self._json(200, payload)
 
     def do_POST(self) -> None:
+        if not self._request_context_valid():
+            self._json(403, {"error": "invalid localhost request context"})
+            return
         parsed = urlsplit(self.path)
+        if parsed.path == "/login":
+            length = min(int(self.headers.get("Content-Length", "0")), 20_000)
+            form = parse_qs(self.rfile.read(length).decode())
+            supplied = form.get("token", [""])[0]
+            if not hmac.compare_digest(supplied, self.token):
+                self._html(403, login_page("The operator token was not accepted."))
+                return
+            session_id = secrets.token_urlsafe(32)
+            csrf = secrets.token_urlsafe(32)
+            with self.sessions_lock:
+                self.sessions[session_id] = (csrf, time.time() + 8 * 60 * 60)
+            cookie = (
+                f"oogway_operator_session={session_id}; Path=/; Max-Age=28800; "
+                "HttpOnly; SameSite=Strict"
+            )
+            self._redirect("/", cookie=cookie)
+            return
         if parsed.path.startswith("/actions/"):
+            session = self._session()
+            if session is None:
+                self._json(401, {"error": "authenticated operator session required"})
+                return
             length = min(int(self.headers.get("Content-Length", "0")), 20_000)
             form = parse_qs(self.rfile.read(length).decode())
             csrf = form.get("csrf", [""])[0]
-            if not hmac.compare_digest(csrf, self.token):
+            if not hmac.compare_digest(csrf, session[1]):
                 self._json(403, {"error": "invalid approval token"})
                 return
             parts = parsed.path.strip("/").split("/")
@@ -167,9 +269,7 @@ class OperatorHandler(BaseHTTPRequestHandler):
             if not changed:
                 self._json(409, {"error": "action is no longer pending"})
                 return
-            self.send_response(303)
-            self.send_header("Location", "/")
-            self.end_headers()
+            self._redirect("/")
             return
         if not self._authorized():
             self._json(401, {"error": "operator bearer token required"})

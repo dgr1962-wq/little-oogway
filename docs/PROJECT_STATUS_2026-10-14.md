@@ -21,7 +21,10 @@
    without repeating openings. It defers while amendments, clarification
    requests, points of order, or unclassified interventions remain unresolved.
    External participants receive withholding markers for Little Oogway's local
-   memory-informed material; the local chair receives the full private docket.
+   memory-informed material, including when that private seat fails; the local
+   chair receives the full private docket. Participant dispositions require a
+   strict first-line label, and chair output is rejected unless its disposition
+   matches the mechanical ledger.
    Retry-safe local model calls receive one controlled retry. A failed chair
    report leaves the round open for chair-only recovery, without repeating paid
    or browser participant turns. Interrupted preflights can be recovered into a
@@ -33,8 +36,8 @@
 ## Verification
 
 - TokenSpace: 5 tests passed.
-- Oogway Core: 57 tests passed.
-- Roundtable: 20 tests passed.
+- Oogway Core: 65 tests passed.
+- Roundtable: 24 tests passed.
 - Public website boundary: 2 tests passed.
 - Live four-seat procedural validation: one opening phase, two review passes,
   one operator ruling, and one completed audit record. ChatGPT, Claude, and
@@ -43,6 +46,14 @@
 - Live website Atlas section: desktop and phone layouts verified.
 - Public map: contains only active AnyKeyCafe HTTPS sources; local files,
   conversations, private memories, and original database identifiers excluded.
+- Live read-only retrieval boundary check: private retrieval found a selected
+  private chat source; public retrieval returned 50 candidates and zero
+  non-public sources.
+- Independent philosopher audit findings B1-B11 were corrected: authenticated
+  operator sessions, path-aware command policy, secret-free execution
+  environments, fail-closed privileged operations, seat-based Roundtable
+  redaction, strict dispositions, mechanical chair validation, and exclusive
+  active preflight leases.
 
 ## Deliberate exclusions
 
