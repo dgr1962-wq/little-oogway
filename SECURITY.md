@@ -24,6 +24,22 @@ The Nomic Atlas exporter independently enforces the same public-source boundary,
 opens TokenSpace read-only, replaces database UUIDs with stable one-way point
 identifiers, and excludes local files and conversations.
 
+## Machine-operator boundary
+
+- Machine tools exist only in the private Open WebUI administrative session.
+- The public website and Roundtable API do not load or proxy operator tools.
+- The operator API binds to loopback and requires a local bearer token for its
+  programmatic endpoints.
+- Read access is limited to `/home/darren` and `/mnt/storage`, excluding known
+  credential and browser-profile locations.
+- Mutating commands are proposals first. Approval and execution state is kept in
+  the TokenSpace `operator_actions` audit ledger.
+- Commands are structured argument arrays; shells, destructive utilities, and
+  privilege-escalation programs are denied.
+- The current service has user-level authority only and runs with
+  `NoNewPrivileges=true`. Root capability requires a separately reviewed,
+  narrowly scoped broker and a local administrator installation step.
+
 ## Operational safety
 
 - Preserve the existing TokenSpace v2 data volume when updating source.

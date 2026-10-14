@@ -1,0 +1,16 @@
+[Unit]
+Description=Little Oogway private machine operator and approval console
+After=network-online.target docker.service
+
+[Service]
+Type=simple
+ExecStart=/home/darren/Documents/Little-Oogway/oogway-core/scripts/run-operator-api.sh
+Restart=on-failure
+RestartSec=3
+Nice=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target
+

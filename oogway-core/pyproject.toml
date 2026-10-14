@@ -13,6 +13,7 @@ dependencies = ["psycopg[binary]>=3.2,<4"]
 oogway-chat = "oogway_core.cli:main"
 oogway-memory = "oogway_core.memory_cli:main"
 oogway-public-retrieval = "oogway_core.public_retrieval_api:main"
+oogway-operator = "oogway_core.operator_api:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

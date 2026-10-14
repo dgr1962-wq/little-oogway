@@ -182,6 +182,35 @@ curl http://127.0.0.1:8091/health
 
 Its tracked unit and launcher are `systemd/oogway-roundtable-api.service` and `scripts/run-roundtable-api.sh`. After changing either one, run `systemctl --user daemon-reload` and restart the service.
 
+### Private machine operator
+
+Little Oogway's private Open WebUI can use the machine-operator tool in
+`openwebui_tools/little_oogway_operator.py`. The tool is deliberately separate
+from the public website and Roundtable bridges and refuses non-admin users.
+
+The operator service listens only on `127.0.0.1:8094`. Read-only inspection is
+available immediately, while commands are written to the TokenSpace
+`operator_actions` audit ledger and remain pending until a local administrator
+approves them in the loopback approval console. Commands use structured argument
+arrays rather than shell text, and credential locations, shells, destructive
+utilities, and privilege-escalation entry points are blocked.
+
+Install the user service on Little Oogway with:
+
+```bash
+mkdir -p ~/.config/little-oogway
+umask 077
+openssl rand -hex 32 > ~/.config/little-oogway/operator.token
+systemctl --user link "$PWD/systemd/oogway-operator.service"
+systemctl --user daemon-reload
+systemctl --user enable --now oogway-operator.service
+```
+
+This service intentionally runs as `darren` with `NoNewPrivileges=true`. A
+future root tier must be a separate, narrowly scoped broker with its own
+allowlist and approval policy; the model must never receive unrestricted sudo or
+a root shell.
+
 ### Public website retrieval
 
 The AnyKeyCafe worker is intentionally separate from the private runtime. A
@@ -206,4 +235,4 @@ Runtime validation on October 13, 2026 completed real `qwen3:8b` conversations t
 
 ## Current scope
 
-The legacy 155 GB bulk-ingestion database is frozen and intentionally excluded from the runtime. Core uses only TokenSpace v2, the nine deliberately imported historical transcripts, and conversations created through the new runtime. Imported text remains historical, untrusted, retrieval-only context. Bounded computer tools and approval logging remain later milestones.
+The legacy 155 GB bulk-ingestion database is frozen and intentionally excluded from the runtime. Core uses only TokenSpace v2, the nine deliberately imported historical transcripts, and conversations created through the new runtime. Imported text remains historical, untrusted, retrieval-only context. The first bounded, user-level machine operator and TokenSpace approval ledger are now in place; privileged administration remains a later, separately reviewed tier.
