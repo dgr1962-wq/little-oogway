@@ -103,3 +103,34 @@ class Tools:
             return "Denied: machine tools require an authenticated administrator."
         return json.dumps(_request("/v1/actions?" + urlencode({"status": status})), indent=2)
 
+    def propose_administrative_command(
+        self,
+        executable: str,
+        arguments_json: str,
+        working_directory: str,
+        reason: str,
+        __user__: dict[str, Any] | None = None,
+    ) -> str:
+        """Propose a red-risk administrative command. It requires ledger approval and graphical PolicyKit authentication."""
+        if not _admin(__user__):
+            return "Denied: administrative tools require an authenticated administrator."
+        try:
+            arguments = json.loads(arguments_json or "[]")
+        except json.JSONDecodeError as exc:
+            return f"Denied: arguments_json is invalid: {exc}"
+        if not isinstance(arguments, list):
+            return "Denied: arguments_json must contain one JSON array."
+        result = _request(
+            "/v1/actions/admin-command",
+            payload={
+                "executable": executable,
+                "arguments": arguments,
+                "cwd": working_directory,
+                "reason": reason,
+                "requested_by": (__user__ or {}).get("name", "little-oogway-admin"),
+            },
+        )
+        return (
+            "Administrative command proposed but not executed. Approval and a graphical "
+            "PolicyKit password prompt are both required.\n" + json.dumps(result, indent=2)
+        )

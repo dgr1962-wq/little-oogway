@@ -206,10 +206,12 @@ systemctl --user daemon-reload
 systemctl --user enable --now oogway-operator.service
 ```
 
-This service intentionally runs as `darren` with `NoNewPrivileges=true`. A
-future root tier must be a separate, narrowly scoped broker with its own
-allowlist and approval policy; the model must never receive unrestricted sudo or
-a root shell.
+This service normally runs as `darren` and holds no root credential. A red-risk
+administrative request is limited to a reviewed executable allowlist,
+recorded in the same ledger, and launched through PolicyKit only after local
+approval. PolicyKit then requires graphical administrator authentication for
+that specific operation. The model never receives a password, unrestricted
+sudo, or a root shell.
 
 ### Public website retrieval
 
@@ -235,4 +237,4 @@ Runtime validation on October 13, 2026 completed real `qwen3:8b` conversations t
 
 ## Current scope
 
-The legacy 155 GB bulk-ingestion database is frozen and intentionally excluded from the runtime. Core uses only TokenSpace v2, the nine deliberately imported historical transcripts, and conversations created through the new runtime. Imported text remains historical, untrusted, retrieval-only context. The first bounded, user-level machine operator and TokenSpace approval ledger are now in place; privileged administration remains a later, separately reviewed tier.
+The legacy 155 GB bulk-ingestion database is frozen and intentionally excluded from the runtime. Core uses only TokenSpace v2, the nine deliberately imported historical transcripts, and conversations created through the new runtime. Imported text remains historical, untrusted, retrieval-only context. The bounded user-level operator and TokenSpace approval ledger are in place. Privileged maintenance is a separate red-risk tier requiring both ledger approval and per-operation graphical PolicyKit authentication.

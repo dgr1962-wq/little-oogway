@@ -65,10 +65,11 @@ article{{background:#1f2937;border:1px solid #374151;border-radius:12px;padding:
 header{{display:flex;gap:12px;align-items:center;flex-wrap:wrap}} code,pre{{font:13px ui-monospace,monospace}}
 pre{{white-space:pre-wrap;background:#0b1220;padding:12px;border-radius:8px;overflow-wrap:anywhere}}
 span{{padding:3px 8px;border-radius:999px;background:#374151}} .complete{{background:#065f46}} .failed,.rejected{{background:#7f1d1d}}
+.pending{{background:#78350f}} article:has(pre){{position:relative}}
 .buttons{{display:flex;gap:10px}} form{{display:inline}} button{{border:0;border-radius:7px;padding:9px 13px;font-weight:700;cursor:pointer}}
 .approve{{background:#34d399}} .reject{{background:#fca5a5}}
 </style></head><body><main><h1>Little Oogway Operator</h1>
-<p>Private localhost approval and audit console. Commands run only after an administrator approves them here.</p>
+<p>Private localhost approval and audit console. Commands run only after an administrator approves them here. Red-risk administrative actions also require a graphical PolicyKit password prompt.</p>
 {content}</main></body></html>""".encode()
 
 
@@ -175,13 +176,18 @@ class OperatorHandler(BaseHTTPRequestHandler):
             return
         try:
             body = self._body()
-            if parsed.path != "/v1/actions/command":
+            if parsed.path not in {"/v1/actions/command", "/v1/actions/admin-command"}:
                 self._json(404, {"error": "not found"})
                 return
             arguments = body.get("arguments", [])
             if not isinstance(arguments, list):
                 raise ValueError("arguments must be a JSON array")
-            action = self.runtime.propose_command(
+            proposer = (
+                self.runtime.propose_privileged_command
+                if parsed.path.endswith("/admin-command")
+                else self.runtime.propose_command
+            )
+            action = proposer(
                 str(body.get("executable", "")),
                 [str(item) for item in arguments],
                 str(body.get("cwd", "/home/darren")),
@@ -212,4 +218,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

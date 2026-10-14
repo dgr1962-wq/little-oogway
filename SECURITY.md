@@ -36,9 +36,10 @@ identifiers, and excludes local files and conversations.
   the TokenSpace `operator_actions` audit ledger.
 - Commands are structured argument arrays; shells, destructive utilities, and
   privilege-escalation programs are denied.
-- The current service has user-level authority only and runs with
-  `NoNewPrivileges=true`. Root capability requires a separately reviewed,
-  narrowly scoped broker and a local administrator installation step.
+- The service itself remains user-level and holds no root credential. Reviewed
+  administrative executables can be proposed as red-risk actions, but
+  execution additionally requires graphical PolicyKit authentication for that
+  exact operation. Passwords are never provided to the model or stored.
 
 ## Operational safety
 

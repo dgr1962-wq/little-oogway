@@ -68,6 +68,21 @@ class OperatorTests(unittest.TestCase):
                         executable, [], str(self.root), "Should be rejected"
                     )
 
+    def test_privileged_command_is_red_and_requires_allowlist(self):
+        action = self.runtime.propose_privileged_command(
+            "/usr/bin/systemctl",
+            ["status", "oogway-operator.service"],
+            str(self.root),
+            "Inspect a system service",
+        )
+        self.assertEqual(action.risk_level, "red")
+        self.assertTrue(action.arguments["privileged"])
+        self.assertEqual(action.arguments["authentication"], "graphical-policykit")
+        with self.assertRaises(PermissionError):
+            self.runtime.propose_privileged_command(
+                "/usr/bin/python3", ["-c", "print('no')"], str(self.root), "Denied"
+            )
+
     def test_dashboard_escapes_untrusted_arguments(self):
         action = self.runtime.propose_command(
             "printf", ["<script>alert(1)</script>"], str(self.root), "Show output"

@@ -8,9 +8,7 @@ ExecStart=/home/darren/Documents/Little-Oogway/oogway-core/scripts/run-operator-
 Restart=on-failure
 RestartSec=3
 Nice=5
-NoNewPrivileges=true
 PrivateTmp=true
 
 [Install]
 WantedBy=default.target
-

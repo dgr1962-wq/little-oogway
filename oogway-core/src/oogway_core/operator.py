@@ -22,6 +22,27 @@ BLOCKED_EXECUTABLES = {
     "parted", "dd", "mount", "umount", "reboot", "shutdown", "poweroff",
     "bash", "sh", "zsh", "fish",
 }
+PRIVILEGED_EXECUTABLES = {
+    "/usr/bin/apt",
+    "/usr/bin/apt-get",
+    "/usr/bin/chmod",
+    "/usr/bin/chown",
+    "/usr/bin/cp",
+    "/usr/bin/install",
+    "/usr/bin/journalctl",
+    "/usr/bin/ln",
+    "/usr/bin/loginctl",
+    "/usr/bin/mkdir",
+    "/usr/bin/mount",
+    "/usr/bin/mv",
+    "/usr/bin/systemctl",
+    "/usr/bin/umount",
+    "/usr/sbin/groupmod",
+    "/usr/sbin/mount",
+    "/usr/sbin/ufw",
+    "/usr/sbin/umount",
+    "/usr/sbin/usermod",
+}
 
 
 def _trim(value: str, limit: int = MAX_OUTPUT) -> tuple[str, bool]:
@@ -155,6 +176,38 @@ class OperatorRuntime:
             requested_via="private-open-webui",
         )
 
+    def propose_privileged_command(
+        self,
+        executable: str,
+        arguments: Sequence[str],
+        cwd: str,
+        reason: str,
+        requested_by: str = "little-oogway",
+    ) -> OperatorAction:
+        resolved = str(Path(executable).resolve(strict=True))
+        if resolved not in PRIVILEGED_EXECUTABLES:
+            raise PermissionError("executable is not in the reviewed administrative allowlist")
+        workdir = self.policy.resolve(cwd)
+        if not workdir.is_dir():
+            raise ValueError("working directory is not a directory")
+        argv = [resolved, *[str(item) for item in arguments]]
+        if len(argv) > 100 or sum(map(len, argv)) > 20_000:
+            raise ValueError("command exceeds the structured argument limit")
+        return self.store.propose(
+            action_type="command",
+            risk_level="red",
+            arguments={
+                "argv": argv,
+                "cwd": str(workdir),
+                "timeout": 900,
+                "privileged": True,
+                "authentication": "graphical-policykit",
+            },
+            reason=reason.strip() or "Little Oogway requested an administrative command",
+            requested_by=requested_by,
+            requested_via="private-open-webui",
+        )
+
     def execute_approved(self, action_id: str) -> OperatorAction:
         action = self.store.get(action_id)
         if action is None:
@@ -194,7 +247,27 @@ class OperatorRuntime:
             raise PermissionError("stored executable is blocked")
         cwd = self.policy.resolve(str(action.arguments.get("cwd", "")))
         timeout = min(max(int(action.arguments.get("timeout", 120)), 1), 900)
-        completed = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, timeout=timeout)
+        execution_argv = argv
+        if action.risk_level == "red":
+            if action.arguments.get("privileged") is not True:
+                raise PermissionError("red-risk action lacks its privileged marker")
+            resolved = str(Path(argv[0]).resolve(strict=True))
+            if resolved not in PRIVILEGED_EXECUTABLES:
+                raise PermissionError("stored executable is not administratively allowed")
+            execution_argv = [
+                "/usr/bin/pkexec",
+                "--disable-internal-agent",
+                "--user",
+                "root",
+                *argv,
+            ]
+        completed = subprocess.run(
+            execution_argv,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
         stdout, stdout_truncated = _trim(completed.stdout)
         stderr, stderr_truncated = _trim(completed.stderr)
         return {
