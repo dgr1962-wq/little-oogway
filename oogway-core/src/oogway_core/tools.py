@@ -70,6 +70,15 @@ class AbsorbSourceTool:
     autostart: bool = True
     name: str = "absorb_source"
 
+    @staticmethod
+    def can_handle(prompt: str) -> bool:
+        """Return whether this prompt is an explicit bounded ingestion request."""
+        if ABSORB_RE.search(prompt) is None:
+            return False
+        if _source_candidates(prompt):
+            return True
+        return re.search(r"\babsorb\s+(?:this|it)\b", prompt, re.IGNORECASE) is not None
+
     def try_execute(self, prompt: str) -> ToolResult | None:
         intent = ABSORB_RE.search(prompt)
         if intent is None:

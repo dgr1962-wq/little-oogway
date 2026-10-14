@@ -20,8 +20,9 @@ credentials, browser profiles, model files, or the frozen legacy corpus.
   sources. The website worker cannot access private conversations or local
   files.
 - **Roundtable** coordinates Little Oogway, ChatGPT, Claude, and optionally
-  DeepSeek through opening statements, review, a procedural ledger, and a
-  locally chaired disposition.
+  DeepSeek through confirmed preflight, opening statements, resumable review
+  passes, a mechanical procedural ledger, operator rulings, and locally chaired
+  final minutes.
 - **Nomic Atlas export** produces a deliberately filtered public-only semantic
   map. The first 2,000-point map is linked from the live Little Oogway page.
 
@@ -73,8 +74,8 @@ PYTHONPATH=roundtable/src python3 -m unittest discover -s roundtable/tests -v
 python3 -m unittest discover -s integrations/public-website -v
 ```
 
-On October 14, 2026, all 62 tests passed (TokenSpace 5, Oogway Core 45,
-Roundtable 10, public website boundary 2). Runtime counts and ingestion progress
+On October 14, 2026, all 79 tests passed (TokenSpace 5, Oogway Core 55,
+Roundtable 17, public website boundary 2). Runtime counts and ingestion progress
 are live operational state and are intentionally not committed.
 
 ## Development boundary

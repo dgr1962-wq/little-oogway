@@ -2,6 +2,7 @@
 
 from .controller import RoundtableController
 from .participants import MockParticipant, OllamaParticipant, Participant
+from .procedure import ProceduralRoundResult, ResumableProcedure
 from .types import ParticipantResult, RoundResult
 
 __all__ = [
@@ -9,6 +10,8 @@ __all__ = [
     "OllamaParticipant",
     "Participant",
     "ParticipantResult",
+    "ProceduralRoundResult",
+    "ResumableProcedure",
     "RoundResult",
     "RoundtableController",
 ]

@@ -16,18 +16,25 @@
 5. The public website assistant now benefits from accumulated ingestion through
    the localhost-only public retrieval API. It receives only public AnyKeyCafe
    excerpts and cannot retrieve private sources.
-6. Roundtable completes ordered openings, shared review, a mechanically
-   classified procedural ledger, and Little Oogway's chaired disposition while
-   withholding the local memory-informed opening from external participants.
+6. Roundtable now supports confirmed preflight, ordered openings, mechanically
+   classified review passes, operator rulings, and resumable deliberation
+   without repeating openings. It defers while amendments, clarification
+   requests, points of order, or unclassified interventions remain unresolved.
+   External participants receive withholding markers for Little Oogway's local
+   memory-informed material; the local chair receives the full private docket.
 7. A filtered 2,000-point public-memory export was mapped in Nomic Atlas. The
    live Little Oogway page includes the first snapshot and a link to the map.
 
 ## Verification
 
 - TokenSpace: 5 tests passed.
-- Oogway Core: 45 tests passed.
-- Roundtable: 10 tests passed.
+- Oogway Core: 55 tests passed.
+- Roundtable: 17 tests passed.
 - Public website boundary: 2 tests passed.
+- Live four-seat procedural validation: one opening phase, two review passes,
+  one operator ruling, and one completed audit record. ChatGPT, Claude, and
+  DeepSeek supported the ruled amendment; a transient local Ollama timeout was
+  recorded as `UNAVAILABLE` rather than concealed.
 - Live website Atlas section: desktop and phone layouts verified.
 - Public map: contains only active AnyKeyCafe HTTPS sources; local files,
   conversations, private memories, and original database identifiers excluded.

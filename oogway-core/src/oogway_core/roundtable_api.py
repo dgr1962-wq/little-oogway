@@ -2,17 +2,19 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 import uuid
 import threading
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from roundtable.controller import RoundtableController
 from roundtable.participants import OllamaParticipant
 from roundtable.browser_participants import CHATGPT, CLAUDE, VisibleBrowserParticipant
 from roundtable.deepseek import DeepSeekMonitor, DeepSeekParticipant
+from roundtable.procedure import ProceduralRoundResult, ResumableProcedure
 
 from .adapter import RoundtableParticipantAdapter
 from .cli import development_dsn
@@ -26,6 +28,10 @@ from .tools import AbsorbSourceTool
 
 MODEL_ID = "little-oogway-roundtable"
 WORKSPACE = Path(__file__).resolve().parents[3]
+COMMAND_RE = re.compile(
+    r"^/roundtable\s+(confirm|resume|status)\s+([0-9a-f-]{36})(?:\s*\n(.*))?$",
+    re.IGNORECASE | re.DOTALL,
+)
 
 
 def latest_user_prompt(messages: object) -> str:
@@ -44,6 +50,13 @@ def latest_user_prompt(messages: object) -> str:
                 if text:
                     return text
     raise ValueError("No nonempty user message was supplied")
+
+
+def parse_roundtable_command(prompt: str) -> tuple[str, str, str] | None:
+    match = COMMAND_RE.fullmatch(prompt.strip())
+    if match is None:
+        return None
+    return match.group(1).lower(), match.group(2).lower(), (match.group(3) or "").strip()
 
 
 class RoundtableRuntime:
@@ -78,12 +91,73 @@ class RoundtableRuntime:
             base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
         ) if deepseek_key else None
         self._round_lock = threading.Lock()
+        self.preflight_directory = self.transcript_directory / "preflight"
 
-    def respond(self, prompt: str) -> tuple[str, dict[str, Any]]:
-        with self._round_lock:
-            return self._respond_locked(prompt)
+    @staticmethod
+    def _write_json(path: Path, value: dict[str, Any]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(path.suffix + ".pending")
+        temporary.write_text(
+            json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        temporary.replace(path)
 
-    def _respond_locked(self, prompt: str) -> tuple[str, dict[str, Any]]:
+    def _preflight_path(self, preflight_id: str) -> Path:
+        return self.preflight_directory / f"{preflight_id}.json"
+
+    def _participant_names(self) -> list[str]:
+        names = ["Little Oogway"]
+        if self.visible_externals:
+            names.extend(("ChatGPT", "Claude"))
+            if self.deepseek is not None:
+                names.append("DeepSeek")
+        else:
+            names.append("Independent Observer")
+        return names
+
+    def _create_preflight(self, motion: str) -> tuple[str, dict[str, Any]]:
+        preflight_id = str(uuid.uuid4())
+        participants = self._participant_names()
+        external_prompt = ResumableProcedure.opening_prompt(motion)
+        record = {
+            "version": 1,
+            "preflight_id": preflight_id,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "status": "pending",
+            "motion": motion,
+            "participants": participants,
+            "external_prompt": external_prompt,
+        }
+        self._write_json(self._preflight_path(preflight_id), record)
+        content = (
+            "# Roundtable preflight\n\n"
+            f"**Preflight:** `{preflight_id}`  \n"
+            f"**Participants:** {', '.join(participants)}  \n"
+            "**Procedure:** openings → review pass → operator ruling if required → "
+            "additional review pass → final chair minutes\n\n"
+            "## Exact opening prompt sent to external participants\n\n"
+            f"```text\n{external_prompt}\n```\n\n"
+            "Little Oogway's memory-informed statements remain withheld from external "
+            "dockets. No external model has been contacted yet.\n\n"
+            "To begin this exact round, send:\n\n"
+            f"`/roundtable confirm {preflight_id}`"
+        )
+        return content, {
+            "mode": "preflight",
+            "preflight_id": preflight_id,
+            "participants": participants,
+            "external_models_contacted": False,
+        }
+
+    def _load_preflight(self, preflight_id: str) -> dict[str, Any]:
+        path = self._preflight_path(preflight_id)
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError as exc:
+            raise ValueError(f"Unknown Roundtable preflight: {preflight_id}") from exc
+
+    def _build_participants(self) -> tuple[list[Any], Any]:
         store = TokenSpaceRepository(development_dsn())
         session = ConversationSession(
             model=OllamaChatModel(model_name=self.primary_model, base_url=self.ollama_url),
@@ -92,26 +166,20 @@ class RoundtableRuntime:
                 repository=store,
                 embedding_model=OllamaEmbeddingModel(base_url=self.ollama_url),
             ),
-            tools=(AbsorbSourceTool(store),),
+            tools=(),
             participant_name="little-oogway",
         )
-        oogway = RoundtableParticipantAdapter(session)
-        first_content, first_metadata = oogway.respond(prompt)
-        if first_metadata.get("tool_execution"):
-            return first_content, {"mode": "bounded-tool", **first_metadata}
+        adapter = RoundtableParticipantAdapter(session)
 
-        class PreparedOogway:
+        class NamedOogway:
             name = "Little Oogway"
-            def __init__(self) -> None:
-                self._first_response_pending = True
 
-            def respond(self, next_prompt: str):
-                if self._first_response_pending:
-                    self._first_response_pending = False
-                    return first_content, first_metadata
-                return oogway.respond(next_prompt)
+            @staticmethod
+            def respond(next_prompt: str):
+                return adapter.respond(next_prompt)
 
-        participants: list[Any] = [PreparedOogway()]
+        oogway = NamedOogway()
+        participants: list[Any] = [oogway]
         if self.visible_externals:
             participants.extend((self.chatgpt, self.claude))
             if self.deepseek is not None:
@@ -120,11 +188,15 @@ class RoundtableRuntime:
                 try:
                     browser_participant.ensure_browser()
                 except Exception:
+                    # Participant-level failure isolation records the real error
+                    # when its turn arrives without preventing other seats from
+                    # deliberating.
                     pass
             if self.deepseek is not None:
                 try:
                     self.deepseek_monitor.open_window()
                 except Exception:
+                    # The monitor is observability, not the API participant.
                     pass
         else:
             participants.append(OllamaParticipant(
@@ -133,44 +205,159 @@ class RoundtableRuntime:
                 base_url=self.ollama_url,
                 system_prompt=(
                     "You are an independent participant in Little Oogway's Roundtable. "
-                    "Analyze the question from a distinct perspective, identify assumptions, "
+                    "Analyze the motion from a distinct perspective, identify assumptions, "
                     "and answer directly. Do not imitate or claim to see other participants."
                 ),
             ))
-        controller = RoundtableController(
-            participants,
-            transcript_directory=self.transcript_directory,
-        )
-        result = controller.run_deliberation(prompt, chair=participants[0])
-        sections = ["# Procedural ledger"]
-        ledger = result.chair.metadata.get("procedural_ledger", []) if result.chair else []
+        return participants, oogway
+
+    @staticmethod
+    def _render_result(result: ProceduralRoundResult) -> str:
+        latest_pass = len(result.review_passes)
+        state = json.loads(result.state_path.read_text(encoding="utf-8"))
+        ledger = state["passes"][-1]["ledger"]
+        sections = [
+            f"# Roundtable {'awaiting a ruling' if result.status == 'awaiting_ruling' else 'complete'}",
+            f"**Round:** `{result.round_id}`  ",
+            f"**Review pass:** {latest_pass}  ",
+            f"**Status:** `{result.status}`",
+            "## Procedural ledger",
+        ]
         sections.extend(
-            f"- **{entry['participant']}**: {entry['disposition']}"
+            f"- `{entry['item_id']}` **{entry['participant']}** — "
+            f"{entry['disposition']} · {entry['status']}"
             for entry in ledger
         )
-        sections.append("# Chair's disposition")
-        if result.chair is not None:
-            chair_body = result.chair.content if result.chair.succeeded else f"Unavailable: {result.chair.error}"
-            sections.append(chair_body or "Unavailable")
-        sections.append("# Opening statements")
-        for participant in result.participants:
-            body = participant.content if participant.succeeded else f"Unavailable: {participant.error}"
-            sections.append(f"## {participant.participant}\n\n{body}")
-        sections.append("# Review and procedural interventions")
-        for participant in result.reviews:
-            body = participant.content if participant.succeeded else f"Unavailable: {participant.error}"
-            sections.append(f"## {participant.participant}\n\n{body}")
-        sections.append(f"---\nRound `{result.round_id}`")
-        return "\n\n".join(sections), {
-            "mode": "deliberation",
+        sections.extend(("## Chair's report", result.chair.content or f"Unavailable: {result.chair.error}"))
+        sections.append("## Latest review pass")
+        for review in result.reviews:
+            body = review.content if review.succeeded else f"Unavailable: {review.error}"
+            sections.append(f"### {review.participant}\n\n{body}")
+        if result.status == "awaiting_ruling":
+            sections.extend((
+                "## Continue without repeating openings",
+                "Supply the ruling, requested fact, or clarification after this command:",
+                f"```text\n/roundtable resume {result.round_id}\nRULING OR CLARIFICATION HERE\n```",
+            ))
+        return "\n\n".join(sections)
+
+    def _confirm(self, preflight_id: str) -> tuple[str, dict[str, Any]]:
+        record = self._load_preflight(preflight_id)
+        if record["status"] == "completed":
+            round_id = record.get("round_id")
+            return (
+                f"That preflight already launched Roundtable round `{round_id}`. "
+                f"Use `/roundtable status {round_id}` to inspect it.",
+                {"mode": "preflight_already_completed", "round_id": round_id},
+            )
+        if record["status"] != "pending":
+            raise ValueError(f"Preflight is {record['status']}; create a fresh preflight")
+        if record["participants"] != self._participant_names():
+            raise ValueError("Participant availability changed; create a fresh preflight")
+        record["status"] = "running"
+        self._write_json(self._preflight_path(preflight_id), record)
+        try:
+            participants, chair = self._build_participants()
+            procedure = ResumableProcedure(participants, self.transcript_directory)
+            result = procedure.start(record["motion"], chair=chair)
+        except Exception:
+            record["status"] = "failed"
+            self._write_json(self._preflight_path(preflight_id), record)
+            raise
+        record["status"] = "completed"
+        record["round_id"] = result.round_id
+        record["completed_at"] = datetime.now(timezone.utc).isoformat()
+        self._write_json(self._preflight_path(preflight_id), record)
+        return self._render_result(result), {
+            "mode": "resumable_procedure",
             "round_id": result.round_id,
-            "transcript": str(result.transcript_path),
-            "participants": [p.participant for p in result.participants],
-            "procedure": ["opening", "review", "chair_disposition"],
-            "chair": result.chair.participant if result.chair else None,
-            "succeeded": result.succeeded,
-            "deepseek_configured": self.deepseek is not None,
+            "status": result.status,
+            "review_pass": len(result.review_passes),
+            "participants": record["participants"],
         }
+
+    def _resume(self, round_id: str, ruling: str) -> tuple[str, dict[str, Any]]:
+        if not ruling:
+            raise ValueError("Put the ruling or clarification on the line after the resume command")
+        participants, chair = self._build_participants()
+        procedure = ResumableProcedure(participants, self.transcript_directory)
+        result = procedure.resume(round_id, ruling, chair=chair)
+        return self._render_result(result), {
+            "mode": "resumable_procedure",
+            "round_id": result.round_id,
+            "status": result.status,
+            "review_pass": len(result.review_passes),
+            "participants": [participant.name for participant in participants],
+        }
+
+    def _status(self, round_id: str) -> tuple[str, dict[str, Any]]:
+        # Status inspection is local-only and must not launch browser or API participants.
+        if not re.fullmatch(r"[0-9a-f-]{36}", round_id):
+            raise ValueError("Invalid round identifier")
+        state_path = self.transcript_directory / "state" / f"{round_id}.json"
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+        except FileNotFoundError as exc:
+            raise ValueError(f"Unknown procedural round: {round_id}") from exc
+        latest = state["passes"][-1]
+        status = {
+            "round_id": state["round_id"],
+            "motion": state["motion"],
+            "status": state["status"],
+            "chair": state["chair"],
+            "participants": state["participants"],
+            "review_pass": latest["number"],
+            "ledger": latest["ledger"],
+        }
+        ledger = "\n".join(
+            f"- `{entry['item_id']}` **{entry['participant']}** — "
+            f"{entry['disposition']} · {entry['status']}"
+            for entry in status["ledger"]
+        )
+        content = (
+            f"# Roundtable status\n\n**Round:** `{round_id}`  \n"
+            f"**Status:** `{status['status']}`  \n"
+            f"**Review pass:** {status['review_pass']}\n\n"
+            f"## Procedural ledger\n\n{ledger}"
+        )
+        return content, {"mode": "procedure_status", **status}
+
+    def respond(self, prompt: str) -> tuple[str, dict[str, Any]]:
+        with self._round_lock:
+            return self._respond_locked(prompt)
+
+    def _respond_locked(self, prompt: str) -> tuple[str, dict[str, Any]]:
+        command = parse_roundtable_command(prompt)
+        if command is not None:
+            action, identifier, body = command
+            if action == "confirm":
+                return self._confirm(identifier)
+            if action == "resume":
+                return self._resume(identifier, body)
+            return self._status(identifier)
+
+        # Preserve the existing bounded ingestion shortcut without involving an
+        # external participant or using the prompt as a deliberation motion.
+        store = TokenSpaceRepository(development_dsn())
+        absorb_tool = AbsorbSourceTool(store)
+        if absorb_tool.can_handle(prompt):
+            # Route the bounded action through the ordinary session so both the
+            # operator request and tool result retain their TokenSpace audit trail.
+            session = ConversationSession(
+                model=OllamaChatModel(model_name=self.primary_model, base_url=self.ollama_url),
+                store=store,
+                tools=(absorb_tool,),
+                participant_name="little-oogway",
+            )
+            result = session.ask(prompt)
+            return result.content, {
+                "mode": "bounded-tool",
+                "conversation_id": result.conversation_id,
+                "round_id": result.round_id,
+                **result.metadata,
+            }
+
+        return self._create_preflight(prompt)
 
 
 class Handler(BaseHTTPRequestHandler):

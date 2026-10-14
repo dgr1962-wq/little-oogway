@@ -15,6 +15,15 @@ class FakeQueue:
 
 
 class AbsorbSourceToolTests(unittest.TestCase):
+    def test_recognizes_only_explicit_bounded_requests(self):
+        self.assertTrue(AbsorbSourceTool.can_handle("Absorb this"))
+        self.assertTrue(
+            AbsorbSourceTool.can_handle("Absorb https://anykeycafe.com/little-o/")
+        )
+        self.assertFalse(
+            AbsorbSourceTool.can_handle("Should an AI absorb knowledge gradually?")
+        )
+
     def test_queues_explicit_approved_url(self):
         queue = FakeQueue()
         result = AbsorbSourceTool(queue, autostart=False).try_execute(
