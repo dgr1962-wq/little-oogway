@@ -19,10 +19,20 @@ credentials, browser profiles, model files, or the frozen legacy corpus.
 - **Public website retrieval** searches only absorbed public AnyKeyCafe HTTPS
   sources. The website worker cannot access private conversations or local
   files.
+- **Private web research** uses a loopback-only SearXNG service plus bounded
+  public HTTPS page reading. Results remain explicitly untrusted evidence and
+  are never absorbed, executed, or exposed to public visitors automatically.
+- **Memory-to-web research** lets the authenticated private session retrieve
+  provenance-bearing TokenSpace memories, compare them with current sources,
+  and report citations and uncertainty without automatically changing memory.
 - **Roundtable** coordinates Little Oogway, ChatGPT, Claude, and optionally
   DeepSeek through confirmed preflight, opening statements, resumable review
   passes, a mechanical procedural ledger, operator rulings, and locally chaired
   final minutes.
+- **Private model selector** presents Little Oogway Core for direct conversation,
+  AI Roundtable for structured deliberation, and Qwen 3 Visual for image work.
+  Raw base and embedding models remain available to the runtime but are hidden
+  from ordinary chat selection.
 - **Nomic Atlas export** produces a deliberately filtered public-only semantic
   map. The first 2,000-point map is linked from the live Little Oogway page.
 
@@ -45,6 +55,7 @@ Current public pages:
 - `integrations/public-website/` — outbound WordPress worker and localhost-only
   public retrieval service definition.
 - `integrations/nomic-atlas/` — guarded public-only export and upload tools.
+- `integrations/searxng/` — loopback-only private metasearch service.
 - `integrations/wordpress/` — source for the Little Oogway Atlas website
   section.
 - `docs/` — experiment plans and dated project status reports.
@@ -74,7 +85,7 @@ PYTHONPATH=roundtable/src python3 -m unittest discover -s roundtable/tests -v
 python3 -m unittest discover -s integrations/public-website -v
 ```
 
-On October 14, 2026, all 96 tests passed (TokenSpace 5, Oogway Core 65,
+On October 14, 2026, all 100 tests passed (TokenSpace 5, Oogway Core 69,
 Roundtable 24, public website boundary 2). Runtime counts and ingestion progress
 are live operational state and are intentionally not committed.
 

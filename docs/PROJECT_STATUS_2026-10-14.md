@@ -32,11 +32,23 @@
    elapsed time, ledger state, and reported DeepSeek token usage.
 7. A filtered 2,000-point public-memory export was mapped in Nomic Atlas. The
    live Little Oogway page includes the first snapshot and a link to the map.
+8. The private Core session can search the live web through a loopback-only
+   SearXNG service and read one bounded public HTTPS page at a time. External
+   text is labeled untrusted evidence, active HTML is stripped, local-network
+   targets are denied, and no result is automatically executed or absorbed.
+9. That same private research surface can explicitly retrieve TokenSpace
+   memories with IDs, provenance, and relevance scores, allowing Little Oogway
+   to compare remembered context with current web evidence. The public website
+   and Roundtable do not receive this private research tool.
+10. The private Open WebUI selector now distinguishes direct Little Oogway Core
+    conversation from the AI Roundtable. The Roundtable is connected through a
+    localhost-only Pipe, while Nomic Embed and raw Qwen base engines are hidden
+    from chat without being removed from the runtime.
 
 ## Verification
 
 - TokenSpace: 5 tests passed.
-- Oogway Core: 65 tests passed.
+- Oogway Core: 69 tests passed.
 - Roundtable: 24 tests passed.
 - Public website boundary: 2 tests passed.
 - Live four-seat procedural validation: one opening phase, two review passes,

@@ -28,6 +28,11 @@ identifiers, and excludes local files and conversations.
 
 - Machine tools exist only in the private Open WebUI administrative session.
 - The public website and Roundtable API do not load or proxy operator tools.
+- The Open WebUI Roundtable selector is a private in-process Pipe that may call
+  only the Roundtable API on `127.0.0.1:8091`; it does not expose that API to the
+  LAN or public website.
+- Nomic Embed and raw Qwen engines are hidden from the chat selector, not
+  removed. TokenSpace may continue to use Nomic for CPU-only embeddings.
 - The operator API binds to loopback, rejects unexpected Host, Origin, and
   cross-site browser requests, and requires a bearer token for programmatic
   endpoints. The approval dashboard requires a short-lived authenticated
@@ -45,6 +50,24 @@ identifiers, and excludes local files and conversations.
   operations have argument-level broker profiles; an executable name alone is
   never treated as a sufficient root boundary.
 - Pending proposals are bounded to reduce approval-fatigue attacks.
+
+## Private web-research boundary
+
+- Web search and page reading exist only in the authenticated private Open
+  WebUI session and the bearer-protected loopback Core service.
+- SearXNG binds to loopback. The public website and Roundtable do not load or
+  proxy the web-research tool.
+- Page reading permits credential-free public HTTPS URLs on port 443, rejects
+  literal IP addresses and local/private/reserved DNS results, revalidates
+  redirects, accepts only bounded textual content, and strips active HTML.
+- Search snippets and fetched pages are labeled untrusted evidence. Their text
+  never grants authority to call tools, reveal secrets, modify the machine, or
+  enter memory. Important claims require independent or primary-source checks.
+- Search and reading do not enqueue ingestion. Absorption remains a separate,
+  explicit administrative act with its existing audit trail.
+- Private TokenSpace retrieval is available beside web research so historical
+  context can be compared with current evidence. Memory identifiers and private
+  source locators remain confined to the authenticated administrative session.
 
 ## Operational safety
 

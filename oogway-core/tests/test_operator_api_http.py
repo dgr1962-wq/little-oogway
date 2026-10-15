@@ -19,9 +19,19 @@ class FakeRuntime:
     store = EmptyStore()
 
 
+class FakeResearch:
+    pass
+
+
+class FakeMemory:
+    pass
+
+
 class OperatorApiHttpTests(unittest.TestCase):
     def setUp(self):
         OperatorHandler.runtime = FakeRuntime()
+        OperatorHandler.research = FakeResearch()
+        OperatorHandler.memory = FakeMemory()
         OperatorHandler.token = "a" * 48
         OperatorHandler.sessions = {}
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), OperatorHandler)

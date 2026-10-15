@@ -17,6 +17,8 @@ from urllib.parse import parse_qs, urlsplit
 from .cli import development_dsn
 from .operator import OperatorRuntime, action_dict
 from .operator_store import OperatorStore
+from .private_memory import PrivateMemorySearchRuntime
+from .web_research import WebResearchRuntime
 
 
 TOKEN_FILE = Path.home() / ".config/little-oogway/operator.token"
@@ -94,6 +96,8 @@ span{{padding:3px 8px;border-radius:999px;background:#374151}} .complete{{backgr
 
 class OperatorHandler(BaseHTTPRequestHandler):
     runtime: OperatorRuntime
+    research: WebResearchRuntime
+    memory: PrivateMemorySearchRuntime
     token: str
     sessions: dict[str, tuple[str, float]] = {}
     sessions_lock = threading.Lock()
@@ -207,6 +211,16 @@ class OperatorHandler(BaseHTTPRequestHandler):
                 payload = self.runtime.search_files(
                     query.get("root", [""])[0], query.get("query", [""])[0]
                 )
+            elif parsed.path == "/v1/web/search":
+                payload = self.research.search(
+                    query.get("query", [""])[0], int(query.get("limit", ["8"])[0])
+                )
+            elif parsed.path == "/v1/web/read":
+                payload = self.research.read_page(query.get("url", [""])[0])
+            elif parsed.path == "/v1/memory/search":
+                payload = self.memory.search(
+                    query.get("query", [""])[0], int(query.get("limit", ["6"])[0])
+                )
             elif parsed.path == "/v1/actions":
                 status = query.get("status", [None])[0]
                 payload = {"actions": [action_dict(item) for item in self.runtime.store.list(status=status)]}
@@ -309,6 +323,8 @@ def main() -> int:
         raise ValueError("operator service may listen only on loopback")
     runtime = OperatorRuntime(OperatorStore(development_dsn()))
     OperatorHandler.runtime = runtime
+    OperatorHandler.research = WebResearchRuntime()
+    OperatorHandler.memory = PrivateMemorySearchRuntime()
     OperatorHandler.token = load_token()
     server = ThreadingHTTPServer((args.host, args.port), OperatorHandler)
     print(f"Little Oogway operator listening on http://{args.host}:{args.port}", flush=True)
