@@ -20,6 +20,12 @@ BLOCKED_PARTS = {
 BLOCKED_NAMES = {
     ".env", ".nomic-token", "operator.token", "roundtable.env", "website-guide.env"
 }
+
+
+def blocked_name(name: str) -> bool:
+    return name in BLOCKED_NAMES or name.startswith(".env.")
+
+
 ALLOWED_COMMANDS = {
     "/usr/bin/cp",
     "/usr/bin/mkdir",
@@ -59,7 +65,7 @@ class PathPolicy:
             raise PermissionError("path is outside Little Oogway's approved roots")
         if any(part in BLOCKED_PARTS for part in resolved.parts):
             raise PermissionError("path is within a protected credential or browser area")
-        if resolved.name in BLOCKED_NAMES:
+        if blocked_name(resolved.name):
             raise PermissionError("credential files are protected")
         return resolved
 
@@ -92,7 +98,7 @@ class OperatorRuntime:
             raise ValueError("path is not a directory")
         entries = []
         for child in sorted(target.iterdir(), key=lambda item: (not item.is_dir(), item.name.casefold())):
-            if child.name in BLOCKED_NAMES or child.name in BLOCKED_PARTS:
+            if blocked_name(child.name) or child.name in BLOCKED_PARTS:
                 continue
             stat = child.stat()
             entries.append({

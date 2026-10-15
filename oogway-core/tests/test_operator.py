@@ -54,6 +54,10 @@ class OperatorTests(unittest.TestCase):
         secret.write_text("PASSWORD=nope", encoding="utf-8")
         with self.assertRaises(PermissionError):
             self.runtime.read_file(str(secret))
+        variant = self.root / ".env.local"
+        variant.write_text("TOKEN=nope", encoding="utf-8")
+        with self.assertRaises(PermissionError):
+            self.runtime.read_file(str(variant))
         with self.assertRaises(PermissionError):
             self.runtime.read_file("/etc/passwd")
         token = self.root / "operator.token"

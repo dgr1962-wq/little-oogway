@@ -239,6 +239,48 @@ The controller implementation is
 mode-600 file `~/.config/little-oogway/main-desk-image-control.token` on both
 machines. Do not commit or print it.
 
+### Private local workbench
+
+`openwebui_tools/little_oogway_workbench.py` exposes fifteen authenticated
+administrator methods through the loopback operator API:
+
+- read PDF, DOCX, ODT, EPUB, HTML, Markdown, and text, with bounded page and
+  byte limits;
+- convert supported documents to provenance-labelled Markdown under the
+  ignored `workbench-output/` directory;
+- run RapidOCR ONNX on scanned PDFs and photographed pages, using Poppler for
+  bounded PDF rendering;
+- inspect audio, video, and images with FFprobe plus Pillow EXIF decoding;
+- inspect and safely extract ZIP, 7z, TAR, TGZ, TAR.GZ, TAR.BZ2, and TAR.XZ;
+- transcribe up to two hours of local audio with faster-whisper `base` on six
+  CPU threads using int8 inference;
+- search with ripgrep, search names and metadata, calculate streaming SHA-256,
+  and detect duplicates without moving or deleting files; and
+- inspect Git status and diffs, run only the registered `core`, `roundtable`, or
+  `all` test profiles, and produce non-executing commit proposals.
+- inspect the live workbench providers, formats, model cache, output root, and
+  security exclusions so Core reports actual capability instead of guessing
+  from remembered conversations.
+
+Install the isolated Python dependencies with:
+
+```bash
+.venv/bin/python -m pip install -e '.[workbench]'
+```
+
+Poppler (`pdftoppm`), FFmpeg/FFprobe, Git, and ripgrep must be present. The
+active machine keeps ripgrep at `~/.local/bin/rg`. Whisper models are cached on
+the large data drive under `/mnt/storage/models/faster-whisper`; the first
+transcription downloads the selected model and later runs are local.
+
+Archive paths are rejected if they are absolute, traverse upward, create links,
+contain more than 2,000 entries, contain an entry over 1 GB, or expand beyond
+5 GB total. Extraction and document conversion write only inside
+`workbench-output/`. OCR, document text, archive names, transcripts, media
+metadata, search results, and Git diffs are all untrusted data and cannot become
+instructions. The tool is attached only to Little Oogway Core, never the public
+website or Roundtable model.
+
 ### Public website retrieval
 
 The AnyKeyCafe worker is intentionally separate from the private runtime. A

@@ -5,6 +5,7 @@ import unittest
 import urllib.error
 import urllib.parse
 import urllib.request
+import json
 
 from oogway_core.operator_api import OperatorHandler
 from http.server import ThreadingHTTPServer
@@ -31,12 +32,27 @@ class FakeVision:
     pass
 
 
+class FakeDocuments:
+    def read(self, path, *, ocr_if_needed, max_pages):
+        return {"path": path, "ocr_if_needed": ocr_if_needed, "max_pages": max_pages}
+
+
+class UnusedWorkbenchRuntime:
+    pass
+
+
 class OperatorApiHttpTests(unittest.TestCase):
     def setUp(self):
         OperatorHandler.runtime = FakeRuntime()
         OperatorHandler.research = FakeResearch()
         OperatorHandler.memory = FakeMemory()
         OperatorHandler.vision = FakeVision()
+        OperatorHandler.documents = FakeDocuments()
+        OperatorHandler.media = UnusedWorkbenchRuntime()
+        OperatorHandler.archives = UnusedWorkbenchRuntime()
+        OperatorHandler.audio = UnusedWorkbenchRuntime()
+        OperatorHandler.files = UnusedWorkbenchRuntime()
+        OperatorHandler.git_workspace = UnusedWorkbenchRuntime()
         OperatorHandler.token = "a" * 48
         OperatorHandler.sessions = {}
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), OperatorHandler)
@@ -79,6 +95,21 @@ class OperatorApiHttpTests(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError) as raised:
             urllib.request.urlopen(request)
         self.assertEqual(raised.exception.code, 403)
+
+    def test_authenticated_workbench_route_dispatches_bounded_payload(self):
+        request = urllib.request.Request(
+            self.base + "/v1/workbench/document/read",
+            data=json.dumps({"path": "/home/darren/example.pdf", "max_pages": 7}).encode(),
+            method="POST",
+            headers={
+                "Authorization": f"Bearer {OperatorHandler.token}",
+                "Content-Type": "application/json",
+            },
+        )
+        payload = json.loads(urllib.request.urlopen(request).read())
+        self.assertEqual(payload["path"], "/home/darren/example.pdf")
+        self.assertEqual(payload["max_pages"], 7)
+        self.assertTrue(payload["ocr_if_needed"])
 
 
 if __name__ == "__main__":

@@ -20,6 +20,14 @@ from .operator_store import OperatorStore
 from .private_memory import PrivateMemorySearchRuntime
 from .web_research import WebResearchRuntime
 from .vision import VisionRuntime
+from .workbench import (
+    ArchiveRuntime,
+    AudioRuntime,
+    DocumentRuntime,
+    FileRuntime,
+    GitWorkspaceRuntime,
+    MediaRuntime,
+)
 
 
 TOKEN_FILE = Path.home() / ".config/little-oogway/operator.token"
@@ -100,6 +108,12 @@ class OperatorHandler(BaseHTTPRequestHandler):
     research: WebResearchRuntime
     memory: PrivateMemorySearchRuntime
     vision: VisionRuntime
+    documents: DocumentRuntime
+    media: MediaRuntime
+    archives: ArchiveRuntime
+    audio: AudioRuntime
+    files: FileRuntime
+    git_workspace: GitWorkspaceRuntime
     token: str
     sessions: dict[str, tuple[str, float]] = {}
     sessions_lock = threading.Lock()
@@ -305,6 +319,45 @@ class OperatorHandler(BaseHTTPRequestHandler):
                 )
                 self._json(200, payload)
                 return
+            workbench_routes = {
+                "/v1/workbench/document/read": lambda: self.documents.read(
+                    str(body.get("path", "")),
+                    ocr_if_needed=bool(body.get("ocr_if_needed", True)),
+                    max_pages=int(body.get("max_pages", 30)),
+                ),
+                "/v1/workbench/document/convert": lambda: self.documents.convert_to_markdown(
+                    str(body.get("path", "")),
+                    ocr_if_needed=bool(body.get("ocr_if_needed", True)),
+                ),
+                "/v1/workbench/document/ocr": lambda: self.documents.ocr(
+                    str(body.get("path", "")), int(body.get("max_pages", 10))
+                ),
+                "/v1/workbench/media/inspect": lambda: self.media.inspect(str(body.get("path", ""))),
+                "/v1/workbench/archive/inspect": lambda: self.archives.inspect(str(body.get("path", ""))),
+                "/v1/workbench/archive/extract": lambda: self.archives.extract(str(body.get("path", ""))),
+                "/v1/workbench/audio/transcribe": lambda: self.audio.transcribe(
+                    str(body.get("path", "")), str(body.get("language", ""))
+                ),
+                "/v1/workbench/files/search": lambda: self.files.search(
+                    str(body.get("root", "")), str(body.get("query", "")), str(body.get("mode", "content"))
+                ),
+                "/v1/workbench/capabilities": lambda: self.files.capabilities(),
+                "/v1/workbench/files/duplicates": lambda: self.files.duplicates(str(body.get("root", ""))),
+                "/v1/workbench/files/hash": lambda: self.files.hash_file(str(body.get("path", ""))),
+                "/v1/workbench/git/status": lambda: self.git_workspace.status(str(body.get("repository", ""))),
+                "/v1/workbench/git/diff": lambda: self.git_workspace.diff(
+                    str(body.get("repository", "")), bool(body.get("staged", False))
+                ),
+                "/v1/workbench/git/test": lambda: self.git_workspace.test(
+                    str(body.get("repository", "")), str(body.get("profile", "all"))
+                ),
+                "/v1/workbench/git/propose-commit": lambda: self.git_workspace.propose_commit(
+                    str(body.get("repository", ""))
+                ),
+            }
+            if parsed.path in workbench_routes:
+                self._json(200, workbench_routes[parsed.path]())
+                return
             if parsed.path not in {"/v1/actions/command", "/v1/actions/admin-command"}:
                 self._json(404, {"error": "not found"})
                 return
@@ -341,6 +394,12 @@ def main() -> int:
     OperatorHandler.research = WebResearchRuntime()
     OperatorHandler.memory = PrivateMemorySearchRuntime()
     OperatorHandler.vision = VisionRuntime()
+    OperatorHandler.documents = DocumentRuntime()
+    OperatorHandler.media = MediaRuntime()
+    OperatorHandler.archives = ArchiveRuntime()
+    OperatorHandler.audio = AudioRuntime()
+    OperatorHandler.files = FileRuntime()
+    OperatorHandler.git_workspace = GitWorkspaceRuntime()
     OperatorHandler.token = load_token()
     server = ThreadingHTTPServer((args.host, args.port), OperatorHandler)
     print(f"Little Oogway operator listening on http://{args.host}:{args.port}", flush=True)
