@@ -48,7 +48,7 @@
 ## Verification
 
 - TokenSpace: 5 tests passed.
-- Oogway Core: 69 tests passed.
+- Oogway Core: 70 tests passed.
 - Roundtable: 24 tests passed.
 - Public website boundary: 2 tests passed.
 - Live four-seat procedural validation: one opening phase, two review passes,

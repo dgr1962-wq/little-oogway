@@ -85,7 +85,7 @@ PYTHONPATH=roundtable/src python3 -m unittest discover -s roundtable/tests -v
 python3 -m unittest discover -s integrations/public-website -v
 ```
 
-On October 14, 2026, all 100 tests passed (TokenSpace 5, Oogway Core 69,
+On October 14, 2026, all 101 tests passed (TokenSpace 5, Oogway Core 70,
 Roundtable 24, public website boundary 2). Runtime counts and ingestion progress
 are live operational state and are intentionally not committed.
 

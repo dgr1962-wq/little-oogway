@@ -2,8 +2,8 @@
 """Configure the private Open WebUI model selector for Little Oogway.
 
 This script is deliberately limited to presentation and Pipe registration:
-it does not remove Ollama models or alter TokenSpace.  Embedding and raw base
-models are hidden from the chat selector with inactive Open WebUI overrides.
+it does not remove Ollama models or alter TokenSpace. Embedding and raw base
+models remain active but are hidden from the chat selector through metadata.
 """
 
 from __future__ import annotations
@@ -143,9 +143,8 @@ def configure(database: Path, backup_directory: Path, owner_id: str | None) -> P
         )
         put_roundtable_pipe(source, owner_id=owner_id, timestamp=now)
 
-        # Exact inactive overrides remove non-chat engines from Open WebUI's
-        # model list without deleting them from Ollama.  The active presets
-        # continue to resolve these bases internally.
+        # Active, hidden overrides keep the engines resolvable by workspace
+        # presets while excluding them from the ordinary chat selector.
         # Do not add an untagged Nomic alias: Open WebUI maps Ollama basenames
         # to the same object as the fully tagged model and would remove it
         # twice while applying inactive overrides.
@@ -163,7 +162,8 @@ def configure(database: Path, backup_directory: Path, owner_id: str | None) -> P
                 model_id=model_id,
                 owner_id=owner_id,
                 name=name,
-                active=False,
+                active=True,
+                meta={"hidden": True},
                 timestamp=now,
             )
 
