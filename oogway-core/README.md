@@ -164,6 +164,16 @@ The local OpenAI-compatible bridge exposes Roundtable as the model ID `little-oo
 
 The bridge runs memory-aware Little Oogway plus visible ChatGPT and Claude browser participants. Ordinary prompts create a no-contact preflight that must be confirmed before opening statements begin. The resumable procedure records mechanical dispositions, pauses for operator rulings, and performs additional review passes without repeating openings. External services receive the submitted agenda and one another's public openings. Little Oogway's memory-informed opening is replaced by a withholding marker in every external docket, so recalled TokenSpace material stays local to the chair. When `DEEPSEEK_API_KEY` is configured, DeepSeek joins through its API and streams into the local Roundtable monitor at `http://127.0.0.1:8092/`. Without an API key, ChatGPT and Claude continue normally and DeepSeek is omitted. The monitor also displays phase, active participant, elapsed time, ledger state, and reported API usage. `/roundtable chair ROUND_ID` retries a failed chair report without repeating participant turns; `/roundtable recover PREFLIGHT_ID` replaces an interrupted preflight with a fresh confirmation. The bridge writes JSONL audit transcripts and atomic state under `roundtable/transcripts/webui`. Explicit single-source absorption requests use the bounded ingestion tool and return its factual result directly.
 
+The private Core model can also prepare a Roundtable request through the
+administrator-only `little_oogway_roundtable_council` tool. Preparation is a
+no-contact operation that shows the exact external docket. Starting the round
+requires a separate exact confirmation phrase containing the preflight UUID.
+Optional document packets are length-bounded, labeled as untrusted evidence,
+and displayed verbatim during preflight; private TokenSpace memories are not
+implicitly converted into an external packet. Status reads and explicit
+operator rulings are available without giving the public website or the
+Roundtable model access to Core's tool surface.
+
 Optional DeepSeek settings belong in the local, mode-600 file `~/.config/little-oogway/roundtable.env`:
 
 ```bash
@@ -249,7 +259,7 @@ machines. Do not commit or print it.
 
 ### Private local workbench
 
-`openwebui_tools/little_oogway_workbench.py` exposes fifteen authenticated
+`openwebui_tools/little_oogway_workbench.py` exposes eighteen authenticated
 administrator methods through the loopback operator API:
 
 - read PDF, DOCX, ODT, EPUB, HTML, Markdown, and text; XLSX, ODS, CSV, and TSV
@@ -270,6 +280,16 @@ administrator methods through the loopback operator API:
 - inspect the live workbench providers, formats, model cache, output root, and
   security exclusions so Core reports actual capability instead of guessing
   from remembered conversations.
+- create fixed-profile FFmpeg derivatives for web video, web audio,
+  lossless audio, thumbnails, and short GIF previews; and
+- render an approved `.blend` project headlessly for a bounded 1–300 frame
+  range with embedded Python disabled and outputs confined to
+  `workbench-output/creative/`.
+
+OBS, Kdenlive, Audacity, and Inkscape may be installed for supervised desktop
+work, but their presence alone is not advertised as autonomous control. OBS
+streaming and publication require a separately reviewed controller and an
+explicit confirmation boundary.
 
 Install the isolated Python dependencies with:
 

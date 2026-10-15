@@ -1,7 +1,7 @@
 """
 title: Little Oogway Local Workbench
 author: AnyKey Cafe
-version: 0.2.0
+version: 0.3.0
 required_open_webui_version: 0.11.0
 description: Admin-only document, OCR, media, archive, transcription, file-search, hashing, duplicate, and bounded Git tools through Oogway Core.
 """
@@ -39,6 +39,35 @@ def _denied() -> str:
 
 
 class Tools:
+    def inspect_creative_capabilities(self, __user__: dict[str, Any] | None = None) -> str:
+        """Inspect installed creative applications and the bounded operations Little Oogway may actually perform."""
+        if not _admin(__user__):
+            return _denied()
+        return json.dumps(_request("/v1/workbench/creative/capabilities", {}), indent=2, ensure_ascii=False)
+
+    def transcode_media(
+        self,
+        path: str,
+        profile: str,
+        __user__: dict[str, Any] | None = None,
+    ) -> str:
+        """Create a bounded media derivative using one fixed profile: web-video, web-audio, lossless-audio, thumbnail, or gif-preview."""
+        if not _admin(__user__):
+            return _denied()
+        return json.dumps(_request("/v1/workbench/creative/transcode", {"path": path, "profile": profile}), indent=2, ensure_ascii=False)
+
+    def render_blender_project(
+        self,
+        path: str,
+        start_frame: int = 1,
+        end_frame: int = 1,
+        __user__: dict[str, Any] | None = None,
+    ) -> str:
+        """Render 1-300 frames from an approved .blend project headlessly with embedded Python disabled; outputs stay in the workbench creative directory."""
+        if not _admin(__user__):
+            return _denied()
+        return json.dumps(_request("/v1/workbench/creative/render-blender", {"path": path, "start_frame": start_frame, "end_frame": end_frame}), indent=2, ensure_ascii=False)
+
     def inspect_workbench_capabilities(self, __user__: dict[str, Any] | None = None) -> str:
         """Inspect the live local workbench providers, supported formats, model cache, output boundary, and security exclusions instead of guessing from memory."""
         if not _admin(__user__):

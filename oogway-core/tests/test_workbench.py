@@ -11,6 +11,7 @@ from unittest.mock import Mock, patch
 from oogway_core.operator import PathPolicy
 from oogway_core.workbench import (
     ArchiveRuntime,
+    CreativeRuntime,
     DocumentRuntime,
     FileRuntime,
     GitWorkspaceRuntime,
@@ -19,6 +20,39 @@ from oogway_core.workbench import (
 
 
 class WorkbenchTests(unittest.TestCase):
+    def test_creative_transcode_uses_fixed_profile_and_bounded_output(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source.wav"
+            source.write_bytes(b"RIFF-test")
+            output = root / "output"
+            runtime = CreativeRuntime(PathPolicy((root,)))
+
+            def completed(argv, **_kwargs):
+                Path(argv[-1]).write_bytes(b"converted")
+                return Mock(returncode=0, stderr="")
+
+            with (
+                patch("oogway_core.workbench.OUTPUT_ROOT", output),
+                patch.object(runtime, "_provider", return_value="/usr/bin/ffmpeg"),
+                patch("oogway_core.workbench.subprocess.run", side_effect=completed) as run,
+            ):
+                result = runtime.transcode(str(source), "web-audio")
+            self.assertTrue(Path(result["output"]).is_file())
+            self.assertIn("/creative/", result["output"])
+            argv = run.call_args.args[0]
+            self.assertEqual(argv[0], "/usr/bin/ffmpeg")
+            self.assertIn("libmp3lame", argv)
+
+    def test_blender_render_rejects_scripts_and_unbounded_ranges(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "scene.blend"
+            source.write_bytes(b"BLENDER")
+            runtime = CreativeRuntime(PathPolicy((root,)))
+            with self.assertRaisesRegex(ValueError, "1-300"):
+                runtime.render_blender(str(source), 1, 301)
+
     def test_reads_and_converts_markdown_with_provenance(self) -> None:
         with TemporaryDirectory() as directory:
             root = Path(directory)

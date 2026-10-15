@@ -44,11 +44,19 @@
     conversation from the AI Roundtable. The Roundtable is connected through a
     localhost-only Pipe, while Nomic Embed and raw Qwen base engines are hidden
     from chat without being removed from the runtime.
+11. Core can prepare a confirmation-gated Roundtable council request without
+    switching models. Optional document packets are bounded, displayed verbatim
+    during no-contact preflight, and shared only after an exact administrator
+    confirmation containing the preflight UUID.
+12. The private workbench now provides fixed-profile FFmpeg derivatives and
+    bounded headless Blender rendering. It accepts no command lines or scripts,
+    disables embedded Blender Python, caps jobs at 300 frames, and confines
+    outputs to the ignored workbench creative directory.
 
 ## Verification
 
 - TokenSpace: 5 tests passed.
-- Oogway Core: 70 tests passed.
+- Oogway Core: 101 tests passed.
 - Roundtable: 24 tests passed.
 - Public website boundary: 2 tests passed.
 - Live four-seat procedural validation: one opening phase, two review passes,

@@ -23,6 +23,7 @@ from .vision import VisionRuntime
 from .workbench import (
     ArchiveRuntime,
     AudioRuntime,
+    CreativeRuntime,
     DocumentRuntime,
     FileRuntime,
     GitWorkspaceRuntime,
@@ -114,6 +115,7 @@ class OperatorHandler(BaseHTTPRequestHandler):
     audio: AudioRuntime
     files: FileRuntime
     git_workspace: GitWorkspaceRuntime
+    creative: CreativeRuntime
     token: str
     sessions: dict[str, tuple[str, float]] = {}
     sessions_lock = threading.Lock()
@@ -342,6 +344,15 @@ class OperatorHandler(BaseHTTPRequestHandler):
                     str(body.get("root", "")), str(body.get("query", "")), str(body.get("mode", "content"))
                 ),
                 "/v1/workbench/capabilities": lambda: self.files.capabilities(),
+                "/v1/workbench/creative/capabilities": lambda: self.creative.capabilities(),
+                "/v1/workbench/creative/transcode": lambda: self.creative.transcode(
+                    str(body.get("path", "")), str(body.get("profile", ""))
+                ),
+                "/v1/workbench/creative/render-blender": lambda: self.creative.render_blender(
+                    str(body.get("path", "")),
+                    int(body.get("start_frame", 1)),
+                    int(body.get("end_frame", 1)),
+                ),
                 "/v1/workbench/files/duplicates": lambda: self.files.duplicates(str(body.get("root", ""))),
                 "/v1/workbench/files/hash": lambda: self.files.hash_file(str(body.get("path", ""))),
                 "/v1/workbench/git/status": lambda: self.git_workspace.status(str(body.get("repository", ""))),
@@ -400,6 +411,7 @@ def main() -> int:
     OperatorHandler.audio = AudioRuntime()
     OperatorHandler.files = FileRuntime()
     OperatorHandler.git_workspace = GitWorkspaceRuntime()
+    OperatorHandler.creative = CreativeRuntime()
     OperatorHandler.token = load_token()
     server = ThreadingHTTPServer((args.host, args.port), OperatorHandler)
     print(f"Little Oogway operator listening on http://{args.host}:{args.port}", flush=True)

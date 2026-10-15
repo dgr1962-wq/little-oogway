@@ -29,6 +29,10 @@ credentials, browser profiles, model files, or the frozen legacy corpus.
   DeepSeek through confirmed preflight, opening statements, resumable review
   passes, a mechanical procedural ledger, operator rulings, and locally chaired
   final minutes.
+- **Core-to-Roundtable council** lets the authenticated private Core prepare a
+  bounded motion and optional document packet. Preparation contacts nobody;
+  external participation requires a separate exact confirmation containing the
+  displayed preflight ID.
 - **Private model selector** presents Little Oogway Core for direct conversation,
   AI Roundtable for structured deliberation, and Qwen 3 Visual for image work.
   Raw base and embedding models remain available to the runtime but are hidden
@@ -40,6 +44,9 @@ credentials, browser profiles, model files, or the frozen legacy corpus.
   administrator check, start, stop, or restart Stable Diffusion over an
   authenticated LAN service. It provides no remote shell or arbitrary command
   execution, and is not attached to the public website.
+- **Main Desk video generation** gives Core a fixed, bounded Wan 2.2 workflow
+  with on-demand GPU service control, conservative size and duration limits,
+  job-status verification, and no arbitrary ComfyUI graph execution.
 - **Private local workbench** reads and converts prose documents, spreadsheets,
   presentations, and bounded legacy LibreOffice-compatible formats; falls back
   to CPU OCR for scans and photographed pages;
@@ -48,6 +55,11 @@ credentials, browser profiles, model files, or the frozen legacy corpus.
   files; and offers read-only Git inspection plus fixed test profiles and commit
   proposals. Extracted material remains untrusted and every method is
   administrator-only.
+- **Bounded creative production** creates fixed-profile web video, web audio,
+  lossless audio, thumbnails, and GIF previews through FFmpeg. Approved Blender
+  projects can be rendered headlessly in 1–300 frame jobs with embedded Python
+  disabled. Desktop applications are inventoried honestly and are not treated
+  as autonomous GUI control.
 - **Nomic Atlas export** produces a deliberately filtered public-only semantic
   map. The first 2,000-point map is linked from the live Little Oogway page.
 
@@ -100,7 +112,7 @@ PYTHONPATH=roundtable/src python3 -m unittest discover -s roundtable/tests -v
 python3 -m unittest discover -s integrations/public-website -v
 ```
 
-On October 14, 2026, all 121 tests passed (TokenSpace 5, Oogway Core 90,
+On October 14, 2026, all 132 tests passed (TokenSpace 5, Oogway Core 101,
 Roundtable 24, public website boundary 2). Runtime counts and ingestion progress
 are live operational state and are intentionally not committed.
 

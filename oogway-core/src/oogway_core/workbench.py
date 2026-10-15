@@ -848,3 +848,157 @@ class GitWorkspaceRuntime:
             "commit_executed": False,
             "guidance": "Review the diff, run a registered test profile, stage intentionally, then ask a human or Codex to approve and create the commit.",
         }
+
+
+class CreativeRuntime:
+    """Fixed-profile creative jobs; never accepts command lines or scripts."""
+
+    MEDIA_PROFILES = {
+        "web-video": {
+            "suffix": ".mp4",
+            "arguments": [
+                "-map", "0:v:0", "-map", "0:a?", "-vf",
+                "scale=w=min(1920\\,iw):h=-2", "-c:v", "libx264", "-preset",
+                "medium", "-crf", "22", "-pix_fmt", "yuv420p", "-c:a", "aac",
+                "-b:a", "192k", "-movflags", "+faststart",
+            ],
+        },
+        "web-audio": {
+            "suffix": ".mp3",
+            "arguments": ["-vn", "-c:a", "libmp3lame", "-b:a", "192k"],
+        },
+        "lossless-audio": {
+            "suffix": ".flac",
+            "arguments": ["-vn", "-c:a", "flac"],
+        },
+        "thumbnail": {
+            "suffix": ".jpg",
+            "arguments": [
+                "-frames:v", "1", "-vf", "scale=w=min(1600\\,iw):h=-2",
+                "-q:v", "2",
+            ],
+        },
+        "gif-preview": {
+            "suffix": ".gif",
+            "arguments": [
+                "-t", "12", "-vf", "fps=12,scale=w=min(720\\,iw):h=-2:flags=lanczos",
+            ],
+        },
+    }
+
+    def __init__(self, policy: PathPolicy | None = None) -> None:
+        self.policy = policy or PathPolicy()
+
+    @staticmethod
+    def _provider(name: str) -> str | None:
+        candidate = Path("/usr/bin") / name
+        return str(candidate) if candidate.is_file() else None
+
+    def capabilities(self) -> dict[str, Any]:
+        providers = {
+            name: self._provider(name)
+            for name in (
+                "blender", "obs", "audacity", "kdenlive", "inkscape", "ffmpeg",
+                "ffprobe", "pandoc", "tesseract", "sox", "rubberband", "mediainfo",
+            )
+        }
+        return {
+            "providers": providers,
+            "media_profiles": sorted(self.MEDIA_PROFILES),
+            "blender": {
+                "headless_render": bool(providers["blender"]),
+                "embedded_python_disabled": True,
+                "maximum_frames_per_job": 300,
+            },
+            "output_root": str(OUTPUT_ROOT / "creative"),
+            "boundaries": [
+                "No arbitrary command lines or application scripts",
+                "No OBS streaming control",
+                "No Kdenlive or Audacity GUI automation",
+                "Outputs are written only below the workbench creative directory",
+            ],
+        }
+
+    def transcode(self, path: str, profile: str) -> dict[str, Any]:
+        source = _bounded_file(self.policy, path, max_bytes=20_000_000_000)
+        selected = profile.strip().lower()
+        settings = self.MEDIA_PROFILES.get(selected)
+        if settings is None:
+            raise ValueError(
+                "profile must be web-video, web-audio, lossless-audio, thumbnail, or gif-preview"
+            )
+        if self._provider("ffmpeg") is None:
+            raise RuntimeError("FFmpeg is not installed")
+        creative_root = OUTPUT_ROOT / "creative"
+        creative_root.mkdir(parents=True, exist_ok=True)
+        output = _safe_output_name(source, f"-{selected}{settings['suffix']}")
+        output = creative_root / output.name
+        if output.is_file():
+            return {
+                "source": str(source), "profile": selected, "output": str(output),
+                "reused": True, "sha256": _sha256_path(output),
+            }
+        temporary = output.with_name(f"{output.stem}.partial{output.suffix}")
+        completed = subprocess.run(
+            [
+                "/usr/bin/ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "warning",
+                "-i", str(source), *settings["arguments"], str(temporary),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=3_600,
+            env=MINIMAL_COMMAND_ENV,
+        )
+        stderr, truncated = _trim(completed.stderr, 20_000)
+        if completed.returncode or not temporary.is_file():
+            temporary.unlink(missing_ok=True)
+            raise RuntimeError(stderr or "FFmpeg did not create an output")
+        os.replace(temporary, output)
+        return {
+            "source": str(source), "profile": selected, "output": str(output),
+            "reused": False, "sha256": _sha256_path(output),
+            "log": stderr, "log_truncated": truncated,
+        }
+
+    def render_blender(self, path: str, start_frame: int = 1, end_frame: int = 1) -> dict[str, Any]:
+        source = _bounded_file(self.policy, path, max_bytes=5_000_000_000)
+        if source.suffix.casefold() != ".blend":
+            raise ValueError("Blender rendering requires a .blend project")
+        if start_frame < 1 or end_frame < start_frame or end_frame - start_frame + 1 > 300:
+            raise ValueError("Blender frame range must contain 1-300 frames")
+        if self._provider("blender") is None:
+            raise RuntimeError("Blender is not installed")
+        creative_root = OUTPUT_ROOT / "creative"
+        creative_root.mkdir(parents=True, exist_ok=True)
+        fingerprint = hashlib.sha256(
+            f"{source}:{start_frame}:{end_frame}".encode("utf-8")
+        ).hexdigest()[:12]
+        output = creative_root / f"{source.stem}-{fingerprint}-blend-render"
+        if output.is_dir() and any(output.iterdir()):
+            return {
+                "source": str(source), "output": str(output), "reused": True,
+                "frames": end_frame - start_frame + 1,
+            }
+        with tempfile.TemporaryDirectory(prefix="oogway-blender-", dir=creative_root) as directory:
+            staging = Path(directory)
+            completed = subprocess.run(
+                [
+                    "/usr/bin/blender", "--background", "--factory-startup",
+                    "--disable-autoexec", str(source), "--render-output",
+                    str(staging / "frame_#####"), "--frame-start", str(start_frame),
+                    "--frame-end", str(end_frame), "--render-anim",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=7_200,
+                env=MINIMAL_COMMAND_ENV,
+            )
+            log, truncated = _trim(completed.stdout + completed.stderr, 40_000)
+            if completed.returncode or not any(staging.iterdir()):
+                raise RuntimeError(log or "Blender did not create rendered frames")
+            os.replace(staging, output)
+        return {
+            "source": str(source), "output": str(output), "reused": False,
+            "frames": end_frame - start_frame + 1, "log": log,
+            "log_truncated": truncated, "embedded_python_disabled": True,
+        }
