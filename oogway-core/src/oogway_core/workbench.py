@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import hashlib
 import importlib.util
 import json
@@ -20,6 +21,10 @@ from .operator import BLOCKED_NAMES, BLOCKED_PARTS, MINIMAL_COMMAND_ENV, PathPol
 MAX_DOCUMENT_BYTES = 250_000_000
 MAX_DOCUMENT_PAGES = 100
 MAX_OCR_PAGES = 30
+MAX_WORKBOOK_SHEETS = 100
+MAX_WORKBOOK_ROWS = 10_000
+MAX_WORKBOOK_CELLS = 100_000
+MAX_PRESENTATION_SLIDES = 500
 MAX_ARCHIVE_FILES = 2_000
 MAX_ARCHIVE_MEMBER_BYTES = 1_000_000_000
 MAX_ARCHIVE_TOTAL_BYTES = 5_000_000_000
@@ -28,7 +33,11 @@ MAX_DUPLICATE_FILES = 50_000
 MAX_TRANSCRIPTION_SECONDS = 7_200
 OUTPUT_ROOT = Path("/home/darren/Documents/Little-Oogway/workbench-output")
 WHISPER_CACHE = Path("/mnt/storage/models/faster-whisper")
-DOCUMENT_EXTENSIONS = {".pdf", ".docx", ".odt", ".epub", ".html", ".htm", ".md", ".markdown", ".txt"}
+DOCUMENT_EXTENSIONS = {
+    ".pdf", ".docx", ".odt", ".epub", ".html", ".htm", ".md", ".markdown", ".txt",
+    ".xlsx", ".ods", ".csv", ".tsv", ".pptx", ".odp", ".doc", ".xls", ".ppt", ".rtf",
+}
+LEGACY_OFFICE_TARGETS = {".doc": ".docx", ".rtf": ".docx", ".xls": ".xlsx", ".ppt": ".pptx"}
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff", ".bmp"}
 ARCHIVE_EXTENSIONS = {".zip", ".7z", ".tar", ".tgz", ".gz", ".bz2", ".xz"}
 RIPGREP_CANDIDATES = (Path("/home/darren/.local/bin/rg"), Path("/usr/bin/rg"))
@@ -99,6 +108,174 @@ class DocumentRuntime:
                 scores.append(float(item[2]))
         return "\n".join(text), scores
 
+    @staticmethod
+    def _tabular_row(values: Iterable[Any]) -> str:
+        return " | ".join(
+            str(value).replace("\n", " ").replace("|", "\\|") if value is not None else ""
+            for value in values
+        )
+
+    def _extract_xlsx(self, source: Path) -> tuple[str, dict[str, Any]]:
+        from openpyxl import load_workbook
+
+        workbook = load_workbook(source, read_only=True, data_only=True, keep_links=False)
+        blocks: list[str] = []
+        cells = 0
+        rows = 0
+        sheets = workbook.worksheets[:MAX_WORKBOOK_SHEETS]
+        try:
+            for sheet in sheets:
+                blocks.append(f"## Sheet: {sheet.title}")
+                for row in sheet.iter_rows(values_only=True):
+                    if rows >= MAX_WORKBOOK_ROWS or cells >= MAX_WORKBOOK_CELLS:
+                        break
+                    values = list(row)[: MAX_WORKBOOK_CELLS - cells]
+                    blocks.append(self._tabular_row(values))
+                    rows += 1
+                    cells += len(values)
+        finally:
+            workbook.close()
+        return "\n".join(blocks), {
+            "format": "xlsx", "sheets": len(sheets), "rows_processed": rows,
+            "cells_processed": cells, "bounded": rows >= MAX_WORKBOOK_ROWS or cells >= MAX_WORKBOOK_CELLS,
+        }
+
+    def _extract_delimited(self, source: Path, delimiter: str | None = None) -> tuple[str, dict[str, Any]]:
+        rows = 0
+        cells = 0
+        blocks: list[str] = []
+        with source.open("r", encoding="utf-8-sig", errors="replace", newline="") as stream:
+            if delimiter is None:
+                sample = stream.read(32_768)
+                stream.seek(0)
+                try:
+                    delimiter = csv.Sniffer().sniff(sample, delimiters=",;\t|").delimiter
+                except csv.Error:
+                    delimiter = ","
+            reader = csv.reader(stream, delimiter=delimiter)
+            for row in reader:
+                if rows >= MAX_WORKBOOK_ROWS or cells >= MAX_WORKBOOK_CELLS:
+                    break
+                values = row[: MAX_WORKBOOK_CELLS - cells]
+                blocks.append(self._tabular_row(values))
+                rows += 1
+                cells += len(values)
+        return "\n".join(blocks), {
+            "format": "tsv" if delimiter == "\t" else "csv", "delimiter": delimiter,
+            "rows_processed": rows, "cells_processed": cells,
+            "bounded": rows >= MAX_WORKBOOK_ROWS or cells >= MAX_WORKBOOK_CELLS,
+        }
+
+    def _extract_ods(self, source: Path) -> tuple[str, dict[str, Any]]:
+        from odf import teletype
+        from odf.opendocument import load
+        from odf.table import Table, TableCell, TableRow
+
+        document = load(str(source))
+        blocks: list[str] = []
+        cells = 0
+        rows = 0
+        sheets = document.getElementsByType(Table)[:MAX_WORKBOOK_SHEETS]
+        for sheet in sheets:
+            title = sheet.getAttribute("name") or f"Sheet {len(blocks) + 1}"
+            blocks.append(f"## Sheet: {title}")
+            for row in sheet.getElementsByType(TableRow):
+                repeat_rows = min(int(row.getAttribute("numberrowsrepeated") or 1), MAX_WORKBOOK_ROWS - rows)
+                values: list[str] = []
+                for cell in row.getElementsByType(TableCell):
+                    value = teletype.extractText(cell)
+                    if not value:
+                        value = cell.getAttribute("value") or cell.getAttribute("stringvalue") or ""
+                    repeat_cells = min(
+                        int(cell.getAttribute("numbercolumnsrepeated") or 1),
+                        MAX_WORKBOOK_CELLS - cells - len(values),
+                    )
+                    values.extend([value] * max(0, repeat_cells))
+                    if cells + len(values) >= MAX_WORKBOOK_CELLS:
+                        break
+                for _ in range(max(0, repeat_rows)):
+                    blocks.append(self._tabular_row(values))
+                    rows += 1
+                    cells += len(values)
+                    if rows >= MAX_WORKBOOK_ROWS or cells >= MAX_WORKBOOK_CELLS:
+                        break
+                if rows >= MAX_WORKBOOK_ROWS or cells >= MAX_WORKBOOK_CELLS:
+                    break
+        return "\n".join(blocks), {
+            "format": "ods", "sheets": len(sheets), "rows_processed": rows,
+            "cells_processed": cells, "bounded": rows >= MAX_WORKBOOK_ROWS or cells >= MAX_WORKBOOK_CELLS,
+        }
+
+    def _extract_pptx(self, source: Path) -> tuple[str, dict[str, Any]]:
+        from pptx import Presentation
+
+        presentation = Presentation(source)
+        slides = list(presentation.slides)[:MAX_PRESENTATION_SLIDES]
+        blocks: list[str] = []
+        for index, slide in enumerate(slides, start=1):
+            parts = [f"## Slide {index}"]
+            for shape in slide.shapes:
+                if getattr(shape, "has_text_frame", False):
+                    text = shape.text.strip()
+                    if text:
+                        parts.append(text)
+                if getattr(shape, "has_table", False):
+                    for row in shape.table.rows:
+                        parts.append(self._tabular_row(cell.text for cell in row.cells))
+            blocks.append("\n\n".join(parts))
+        return "\n\n".join(blocks), {
+            "format": "pptx", "slides": len(presentation.slides), "slides_processed": len(slides),
+            "bounded": len(presentation.slides) > len(slides),
+        }
+
+    def _extract_odp(self, source: Path) -> tuple[str, dict[str, Any]]:
+        from odf import teletype
+        from odf.draw import Page
+        from odf.opendocument import load
+        from odf.text import H, P
+
+        document = load(str(source))
+        pages = document.getElementsByType(Page)
+        selected = pages[:MAX_PRESENTATION_SLIDES]
+        blocks: list[str] = []
+        for index, page in enumerate(selected, start=1):
+            text_nodes = list(page.getElementsByType(H)) + list(page.getElementsByType(P))
+            content = [teletype.extractText(node).strip() for node in text_nodes]
+            blocks.append("\n\n".join([f"## Slide {index}"] + [item for item in content if item]))
+        return "\n\n".join(blocks), {
+            "format": "odp", "slides": len(pages), "slides_processed": len(selected),
+            "bounded": len(pages) > len(selected),
+        }
+
+    def _convert_legacy_office(self, source: Path) -> tuple[Path, tempfile.TemporaryDirectory[str]]:
+        target_suffix = LEGACY_OFFICE_TARGETS[source.suffix.casefold()]
+        OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
+        temporary = tempfile.TemporaryDirectory(prefix=".office-convert-", dir=OUTPUT_ROOT)
+        destination = Path(temporary.name) / "output"
+        destination.mkdir()
+        profile = Path(temporary.name) / "profile"
+        staged_source = Path(temporary.name) / f"source{source.suffix.casefold()}"
+        shutil.copy2(source, staged_source)
+        libreoffice = next(
+            (path for path in (Path("/snap/bin/libreoffice"), Path("/usr/bin/libreoffice"), Path("/usr/bin/soffice")) if path.exists()),
+            None,
+        )
+        if libreoffice is None:
+            temporary.cleanup()
+            raise RuntimeError("LibreOffice is not installed")
+        env = dict(MINIMAL_COMMAND_ENV)
+        env.update({"LANG": "C.UTF-8", "SAL_USE_VCLPLUGIN": "svp"})
+        completed = subprocess.run(
+            [str(libreoffice), f"-env:UserInstallation=file://{profile}", "--headless", "--nologo", "--nodefault", "--nolockcheck", "--norestore", "--convert-to", target_suffix.lstrip("."), "--outdir", str(destination), str(staged_source)],
+            capture_output=True, text=True, timeout=180, env=env,
+        )
+        outputs = list(destination.glob(f"*{target_suffix}"))
+        if completed.returncode or len(outputs) != 1:
+            temporary.cleanup()
+            message = (completed.stderr or completed.stdout).strip()[:1000]
+            raise RuntimeError(message or "LibreOffice conversion failed")
+        return outputs[0], temporary
+
     def ocr(self, path: str, max_pages: int = 10) -> dict[str, Any]:
         source = _bounded_file(self.policy, path)
         page_limit = min(max(int(max_pages), 1), MAX_OCR_PAGES)
@@ -164,6 +341,23 @@ class DocumentRuntime:
     def _extract(self, source: Path, *, ocr_if_needed: bool, max_pages: int) -> tuple[str, dict[str, Any]]:
         suffix = source.suffix.casefold()
         metadata: dict[str, Any] = {"format": suffix.lstrip(".") or "text"}
+        if suffix in LEGACY_OFFICE_TARGETS:
+            converted, temporary = self._convert_legacy_office(source)
+            try:
+                text, converted_metadata = self._extract(
+                    converted, ocr_if_needed=ocr_if_needed, max_pages=max_pages
+                )
+                intermediate_format = converted.suffix.lstrip(".")
+            finally:
+                temporary.cleanup()
+            converted_metadata.update(
+                {
+                    "format": suffix.lstrip("."),
+                    "converted_via": "LibreOffice",
+                    "intermediate_format": intermediate_format,
+                }
+            )
+            return text, converted_metadata
         if suffix in {".txt", ".md", ".markdown"}:
             return source.read_text(encoding="utf-8", errors="replace"), metadata
         if suffix in {".html", ".htm"}:
@@ -194,6 +388,16 @@ class DocumentRuntime:
             blocks = [teletype.extractText(node) for node in document.getElementsByType(H)]
             blocks.extend(teletype.extractText(node) for node in document.getElementsByType(P))
             return "\n\n".join(blocks), metadata
+        if suffix == ".xlsx":
+            return self._extract_xlsx(source)
+        if suffix == ".ods":
+            return self._extract_ods(source)
+        if suffix in {".csv", ".tsv"}:
+            return self._extract_delimited(source, "\t" if suffix == ".tsv" else None)
+        if suffix == ".pptx":
+            return self._extract_pptx(source)
+        if suffix == ".odp":
+            return self._extract_odp(source)
         if suffix == ".epub":
             from bs4 import BeautifulSoup
             from ebooklib import ITEM_DOCUMENT, epub
@@ -230,7 +434,7 @@ class DocumentRuntime:
     def read(self, path: str, *, ocr_if_needed: bool = True, max_pages: int = 30) -> dict[str, Any]:
         source = _bounded_file(self.policy, path)
         if source.suffix.casefold() not in DOCUMENT_EXTENSIONS:
-            raise ValueError("supported documents are PDF, DOCX, ODT, EPUB, HTML, Markdown, and text")
+            raise ValueError("unsupported document, spreadsheet, or presentation format")
         page_limit = min(max(int(max_pages), 1), MAX_DOCUMENT_PAGES)
         text, metadata = self._extract(source, ocr_if_needed=ocr_if_needed, max_pages=page_limit)
         content, truncated = _trim(_clean_text(text), 200_000)
@@ -461,10 +665,14 @@ class FileRuntime:
             "git": Path("/usr/bin/git"),
             "pdftoppm": Path("/usr/bin/pdftoppm"),
             "ripgrep": next((path for path in RIPGREP_CANDIDATES if path.is_file()), RIPGREP_CANDIDATES[0]),
+            "libreoffice": next(
+                (path for path in (Path("/snap/bin/libreoffice"), Path("/usr/bin/libreoffice"), Path("/usr/bin/soffice")) if path.exists()),
+                Path("/snap/bin/libreoffice"),
+            ),
         }
         packages = [
             "bs4", "docx", "ebooklib", "faster_whisper", "odf", "pdfplumber",
-            "PIL", "py7zr", "rapidocr_onnxruntime",
+            "openpyxl", "PIL", "pptx", "py7zr", "rapidocr_onnxruntime",
         ]
         return {
             "commands": {name: str(path) if path.is_file() else None for name, path in commands.items()},

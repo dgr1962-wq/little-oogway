@@ -47,6 +47,107 @@ class WorkbenchTests(unittest.TestCase):
             self.assertIn("Useful text", result["content"])
             self.assertNotIn("attack", result["content"])
 
+    def test_reads_xlsx_spreadsheet_cells(self) -> None:
+        from openpyxl import Workbook
+
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "budget.xlsx"
+            workbook = Workbook()
+            sheet = workbook.active
+            sheet.title = "Budget"
+            sheet.append(["Item", "Cost"])
+            sheet.append(["Quantum cookies", 12.5])
+            workbook.save(source)
+            result = DocumentRuntime(PathPolicy((root,))).read(str(source))
+            self.assertIn("## Sheet: Budget", result["content"])
+            self.assertIn("Quantum cookies | 12.5", result["content"])
+            self.assertEqual(result["metadata"]["format"], "xlsx")
+
+    def test_reads_ods_spreadsheet_cells(self) -> None:
+        from odf.opendocument import OpenDocumentSpreadsheet
+        from odf.table import Table, TableCell, TableRow
+        from odf.text import P
+
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "budget.ods"
+            document = OpenDocumentSpreadsheet()
+            table = Table(name="Budget")
+            for values in (["Item", "Cost"], ["Quantum cookies", "12.5"]):
+                row = TableRow()
+                for value in values:
+                    cell = TableCell(valuetype="string")
+                    cell.addElement(P(text=value))
+                    row.addElement(cell)
+                table.addElement(row)
+            document.spreadsheet.addElement(table)
+            document.save(str(source))
+            result = DocumentRuntime(PathPolicy((root,))).read(str(source))
+            self.assertIn("## Sheet: Budget", result["content"])
+            self.assertIn("Quantum cookies | 12.5", result["content"])
+            self.assertEqual(result["metadata"]["format"], "ods")
+
+    def test_reads_pptx_presentation_text(self) -> None:
+        from pptx import Presentation
+
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "briefing.pptx"
+            presentation = Presentation()
+            slide = presentation.slides.add_slide(presentation.slide_layouts[1])
+            slide.shapes.title.text = "Little Oogway"
+            slide.placeholders[1].text = "Bounded local tools"
+            presentation.save(source)
+            result = DocumentRuntime(PathPolicy((root,))).read(str(source))
+            self.assertIn("## Slide 1", result["content"])
+            self.assertIn("Bounded local tools", result["content"])
+            self.assertEqual(result["metadata"]["format"], "pptx")
+
+    def test_reads_odp_presentation_text(self) -> None:
+        from odf.draw import Frame, Page, TextBox
+        from odf.opendocument import OpenDocumentPresentation
+        from odf.style import MasterPage, PageLayout
+        from odf.text import P
+
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "briefing.odp"
+            document = OpenDocumentPresentation()
+            layout = PageLayout(name="Layout")
+            document.automaticstyles.addElement(layout)
+            document.masterstyles.addElement(MasterPage(name="Default", pagelayoutname="Layout"))
+            page = Page(name="slide1", masterpagename="Default")
+            frame = Frame(x="1cm", y="1cm", width="20cm", height="10cm")
+            box = TextBox()
+            box.addElement(P(text="Bounded local tools"))
+            frame.addElement(box)
+            page.addElement(frame)
+            document.presentation.addElement(page)
+            document.save(str(source))
+            result = DocumentRuntime(PathPolicy((root,))).read(str(source))
+            self.assertIn("## Slide 1", result["content"])
+            self.assertIn("Bounded local tools", result["content"])
+            self.assertEqual(result["metadata"]["format"], "odp")
+
+    def test_legacy_office_conversion_is_isolated_before_parsing(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "old.doc"
+            source.write_bytes(b"legacy")
+            converted = root / "old.docx"
+            temporary = Mock()
+            runtime = DocumentRuntime(PathPolicy((root,)))
+            with patch.object(runtime, "_convert_legacy_office", return_value=(converted, temporary)), patch.object(
+                runtime, "_extract", side_effect=[("converted text", {"format": "docx"})]
+            ) as extract:
+                text, metadata = DocumentRuntime._extract(runtime, source, ocr_if_needed=True, max_pages=30)
+            self.assertEqual(text, "converted text")
+            self.assertEqual(metadata["converted_via"], "LibreOffice")
+            self.assertEqual(metadata["intermediate_format"], "docx")
+            temporary.cleanup.assert_called_once()
+            extract.assert_called_once()
+
     def test_ocr_image_is_bounded_and_reports_confidence(self) -> None:
         with TemporaryDirectory() as directory:
             root = Path(directory)

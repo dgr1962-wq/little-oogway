@@ -40,8 +40,9 @@ credentials, browser profiles, model files, or the frozen legacy corpus.
   administrator check, start, stop, or restart Stable Diffusion over an
   authenticated LAN service. It provides no remote shell or arbitrary command
   execution, and is not attached to the public website.
-- **Private local workbench** reads and converts PDF, DOCX, ODT, EPUB, HTML,
-  Markdown, and text; falls back to CPU OCR for scans and photographed pages;
+- **Private local workbench** reads and converts prose documents, spreadsheets,
+  presentations, and bounded legacy LibreOffice-compatible formats; falls back
+  to CPU OCR for scans and photographed pages;
   inspects media streams and EXIF; safely handles ZIP, 7z, and TAR archives;
   transcribes local audio with Whisper; searches, hashes, and detects duplicate
   files; and offers read-only Git inspection plus fixed test profiles and commit
@@ -99,7 +100,7 @@ PYTHONPATH=roundtable/src python3 -m unittest discover -s roundtable/tests -v
 python3 -m unittest discover -s integrations/public-website -v
 ```
 
-On October 14, 2026, all 116 tests passed (TokenSpace 5, Oogway Core 85,
+On October 14, 2026, all 121 tests passed (TokenSpace 5, Oogway Core 90,
 Roundtable 24, public website boundary 2). Runtime counts and ingestion progress
 are live operational state and are intentionally not committed.
 

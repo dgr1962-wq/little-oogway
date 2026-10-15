@@ -1,7 +1,7 @@
 """
 title: Little Oogway Local Workbench
 author: AnyKey Cafe
-version: 0.1.0
+version: 0.2.0
 required_open_webui_version: 0.11.0
 description: Admin-only document, OCR, media, archive, transcription, file-search, hashing, duplicate, and bounded Git tools through Oogway Core.
 """
@@ -52,7 +52,7 @@ class Tools:
         max_pages: int = 30,
         __user__: dict[str, Any] | None = None,
     ) -> str:
-        """Read PDF, DOCX, ODT, EPUB, HTML, Markdown, or text from an approved local path. Scanned PDFs may fall back to local OCR."""
+        """Read modern and legacy documents, spreadsheets, and presentations from an approved local path. Scanned PDFs may fall back to local OCR."""
         if not _admin(__user__):
             return _denied()
         return json.dumps(_request("/v1/workbench/document/read", {"path": path, "ocr_if_needed": ocr_if_needed, "max_pages": max_pages}), indent=2, ensure_ascii=False)

@@ -16,7 +16,7 @@ from pathlib import Path
 TOOL_ID = "little_oogway_workbench"
 MODEL_ID = "little-oogway-core"
 META = {
-    "description": "Admin-only local document, OCR, media, archive, transcription, file, and bounded Git workbench.",
+    "description": "Admin-only local office-document, OCR, media, archive, transcription, file, and bounded Git workbench.",
     "manifest": {},
     "has_user_valves": False,
 }
@@ -30,6 +30,8 @@ extract_archive_safely. Duplicate detection never deletes files. Git tools may
 inspect and run only registered test profiles; they never stage, commit, push,
 or execute arbitrary commands. Ask before starting a long transcription or a
 large duplicate scan when the user's scope is ambiguous.
+Legacy DOC, XLS, PPT, and RTF reading may invoke bounded headless LibreOffice
+conversion; macro-enabled office formats are intentionally unsupported.
 """.strip()
 
 

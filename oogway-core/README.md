@@ -244,8 +244,9 @@ machines. Do not commit or print it.
 `openwebui_tools/little_oogway_workbench.py` exposes fifteen authenticated
 administrator methods through the loopback operator API:
 
-- read PDF, DOCX, ODT, EPUB, HTML, Markdown, and text, with bounded page and
-  byte limits;
+- read PDF, DOCX, ODT, EPUB, HTML, Markdown, and text; XLSX, ODS, CSV, and TSV
+  spreadsheets; PPTX and ODP presentations; and legacy DOC, XLS, PPT, and RTF,
+  with bounded page, slide, row, cell, and byte limits;
 - convert supported documents to provenance-labelled Markdown under the
   ignored `workbench-output/` directory;
 - run RapidOCR ONNX on scanned PDFs and photographed pages, using Poppler for
@@ -272,6 +273,10 @@ Poppler (`pdftoppm`), FFmpeg/FFprobe, Git, and ripgrep must be present. The
 active machine keeps ripgrep at `~/.local/bin/rg`. Whisper models are cached on
 the large data drive under `/mnt/storage/models/faster-whisper`; the first
 transcription downloads the selected model and later runs are local.
+
+Legacy office files are converted through headless LibreOffice in a disposable
+profile before direct parsing. Macro-enabled formats are not accepted. Modern
+office files are parsed directly and never launched in LibreOffice.
 
 Archive paths are rejected if they are absolute, traverse upward, create links,
 contain more than 2,000 entries, contain an entry over 1 GB, or expand beyond
