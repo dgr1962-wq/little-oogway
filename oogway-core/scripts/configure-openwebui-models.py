@@ -168,16 +168,34 @@ def configure(database: Path, backup_directory: Path, owner_id: str | None) -> P
             )
 
         # Core's curated server-side tools must not be crowded out by Open
-        # WebUI's large generic builtin tool catalogue.  Small local models
-        # otherwise tend to see only notes/calendar/automation functions and
-        # miss the private research, operator, and ingestion bundles.
+        # WebUI's large generic builtin catalogue. Permit only the native
+        # image-generation bridge; all other abilities use the smaller,
+        # audited Little Oogway tool bundles.
         core = source.execute(
             "SELECT meta FROM model WHERE id = ?", ("little-oogway-core",)
         ).fetchone()
         if core is not None:
             core_meta = json.loads(core[0] or "{}")
             capabilities = core_meta.setdefault("capabilities", {})
-            capabilities["builtin_tools"] = False
+            capabilities["builtin_tools"] = True
+            capabilities["image_generation"] = True
+            core_meta["builtinTools"] = {
+                "time": False,
+                "files": False,
+                "knowledge": False,
+                "chats": False,
+                "subagents": False,
+                "memory": False,
+                "web_search": False,
+                "image_generation": True,
+                "code_interpreter": False,
+                "notes": False,
+                "channels": False,
+                "tasks": False,
+                "automations": False,
+                "calendar": False,
+                "notifications": False,
+            }
             source.execute(
                 "UPDATE model SET meta = ?, updated_at = ? WHERE id = ?",
                 (json.dumps(core_meta), now, "little-oogway-core"),

@@ -153,11 +153,28 @@ def main() -> int:
         if TOOL_ID not in tool_ids:
             tool_ids.append(TOOL_ID)
         model_meta["toolIds"] = tool_ids
-        # Keep Core's deliberately curated private tool surface small. Open
-        # WebUI's generic builtin catalogue (notes, calendar, automations,
-        # etc.) can overwhelm an 8B model and obscure these attached tools.
+        # Keep Core's deliberately curated private tool surface small while
+        # retaining the native image-generation bridge to Main Desk.
         capabilities = model_meta.setdefault("capabilities", {})
-        capabilities["builtin_tools"] = False
+        capabilities["builtin_tools"] = True
+        capabilities["image_generation"] = True
+        model_meta["builtinTools"] = {
+            "time": False,
+            "files": False,
+            "knowledge": False,
+            "chats": False,
+            "subagents": False,
+            "memory": False,
+            "web_search": False,
+            "image_generation": True,
+            "code_interpreter": False,
+            "notes": False,
+            "channels": False,
+            "tasks": False,
+            "automations": False,
+            "calendar": False,
+            "notifications": False,
+        }
         system_prompt = str(model_params.get("system") or "").rstrip()
         if RESEARCH_PROTOCOL not in system_prompt:
             system_prompt = f"{system_prompt}\n\n{RESEARCH_PROTOCOL}".strip()

@@ -84,7 +84,11 @@ class OpenWebUiSelectorTests(unittest.TestCase):
                     "SELECT meta FROM model WHERE id = 'little-oogway-core'"
                 ).fetchone()[0]
             )
-            self.assertFalse(core_meta["capabilities"]["builtin_tools"])
+            self.assertTrue(core_meta["capabilities"]["builtin_tools"])
+            self.assertTrue(core_meta["capabilities"]["image_generation"])
+            self.assertTrue(core_meta["builtinTools"]["image_generation"])
+            self.assertFalse(core_meta["builtinTools"]["calendar"])
+            self.assertFalse(core_meta["builtinTools"]["automations"])
             connection.close()
 
 
