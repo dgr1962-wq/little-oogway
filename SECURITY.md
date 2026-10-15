@@ -38,7 +38,9 @@ identifiers, and excludes local files and conversations.
   endpoints. The approval dashboard requires a short-lived authenticated
   session with a distinct CSRF token; it never embeds the bearer token.
 - Read access is limited to `/home/darren` and `/mnt/storage`, excluding known
-  credential and browser-profile locations.
+  credential and browser-profile locations. Protected filenames include local
+  environment files, operator and service tokens, Git/netrc credentials,
+  common credential JSON files, and WordPress `wp-config.php`.
 - Mutating commands are proposals first. Approval and execution state is kept in
   the TokenSpace `operator_actions` audit ledger.
 - Commands are structured argument arrays and use a small path-aware allowlist
@@ -50,6 +52,32 @@ identifiers, and excludes local files and conversations.
   operations have argument-level broker profiles; an executable name alone is
   never treated as a sufficient root boundary.
 - Pending proposals are bounded to reduce approval-fatigue attacks.
+
+## Reciprocal Main Desk boundary
+
+- Cross-machine project access uses a dedicated source-address-restricted key
+  forced to `internal-sftp`; it cannot open a shell, allocate a terminal, or
+  forward agents, X11, or network ports.
+- Main Desk exports only the operator's `Documents` directory and the dedicated
+  `/mnt/AI_WORKSPACE/website-staging` tree. The remainder of the data drive and
+  the Main Desk home directory are not mounted into Little Oogway.
+- Mounted paths remain subject to the same Core `PathPolicy`, protected-name
+  rules, and authenticated private-session boundary as local files.
+- File access is not publication authority. Live deployment must use a separate
+  target-specific controller that presents a preview/diff and requires an
+  explicit administrator approval before changing the hosted site.
+
+## Roundtable and creative-production boundary
+
+- Core may prepare a Roundtable preflight and bounded document packet, but the
+  preflight contacts nobody. External calls require a second exact typed
+  confirmation containing that preflight's UUID.
+- Fixed creative jobs never accept a command line or script. FFmpeg uses named
+  profiles, and Blender accepts only an approved `.blend` path plus a 1–300
+  frame range while embedded Python is disabled.
+- Installing OBS, Kdenlive, Audacity, Inkscape, or another desktop application
+  does not grant autonomous GUI or publication control. Each state-changing
+  controller requires its own reviewed operation and confirmation policy.
 
 ## Private web-research boundary
 

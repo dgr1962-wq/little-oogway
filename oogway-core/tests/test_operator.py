@@ -64,6 +64,10 @@ class OperatorTests(unittest.TestCase):
         token.write_text("secret", encoding="utf-8")
         with self.assertRaises(PermissionError):
             self.runtime.read_file(str(token))
+        wordpress = self.root / "wp-config.php"
+        wordpress.write_text("DB_PASSWORD=secret", encoding="utf-8")
+        with self.assertRaises(PermissionError):
+            self.runtime.read_file(str(wordpress))
 
     def test_search_does_not_follow_symlinks_outside_root(self):
         with tempfile.TemporaryDirectory() as outside:

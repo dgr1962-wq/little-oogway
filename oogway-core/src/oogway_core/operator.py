@@ -18,7 +18,9 @@ BLOCKED_PARTS = {
     "google-chrome", "keyrings",
 }
 BLOCKED_NAMES = {
-    ".env", ".nomic-token", "operator.token", "roundtable.env", "website-guide.env"
+    ".env", ".git-credentials", ".netrc", ".nomic-token", "credentials.json",
+    "operator.token", "roundtable.env", "secrets.json", "website-guide.env",
+    "wp-config.php",
 }
 
 
