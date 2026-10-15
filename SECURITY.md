@@ -58,9 +58,11 @@ identifiers, and excludes local files and conversations.
 - Cross-machine project access uses a dedicated source-address-restricted key
   forced to `internal-sftp`; it cannot open a shell, allocate a terminal, or
   forward agents, X11, or network ports.
-- Main Desk exports only the operator's `Documents` directory and the dedicated
-  `/mnt/AI_WORKSPACE/website-staging` tree. The remainder of the data drive and
-  the Main Desk home directory are not mounted into Little Oogway.
+- Little Oogway's persistent Core-facing mounts expose only the operator's
+  `Documents` directory and the dedicated `/mnt/AI_WORKSPACE/website-staging`
+  tree. The forced-SFTP credential belongs to the operator account and is not a
+  filesystem chroot; its private key is therefore kept outside Core's tool
+  interface and must not be handed to a model or public service.
 - Mounted paths remain subject to the same Core `PathPolicy`, protected-name
   rules, and authenticated private-session boundary as local files.
 - File access is not publication authority. Live deployment must use a separate
