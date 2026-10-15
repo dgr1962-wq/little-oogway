@@ -1,0 +1,14 @@
+[Unit]
+Description=Stable Diffusion WebUI image workspace
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/darren/stable-diffusion/stable-diffusion-webui
+ExecStart=/home/darren/stable-diffusion/stable-diffusion-webui/webui.sh
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target

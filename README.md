@@ -33,6 +33,13 @@ credentials, browser profiles, model files, or the frozen legacy corpus.
   AI Roundtable for structured deliberation, and Qwen 3 Visual for image work.
   Raw base and embedding models remain available to the runtime but are hidden
   from ordinary chat selection.
+- **Private visual understanding** normalizes WebP and other common image formats
+  before Qwen3-VL inspection, keeps visible text untrusted, and composes SDXL
+  variation prompts in a separate second pass.
+- **Main Desk image workspace control** lets only an authenticated Open WebUI
+  administrator check, start, stop, or restart Stable Diffusion over an
+  authenticated LAN service. It provides no remote shell or arbitrary command
+  execution, and is not attached to the public website.
 - **Nomic Atlas export** produces a deliberately filtered public-only semantic
   map. The first 2,000-point map is linked from the live Little Oogway page.
 
@@ -85,7 +92,7 @@ PYTHONPATH=roundtable/src python3 -m unittest discover -s roundtable/tests -v
 python3 -m unittest discover -s integrations/public-website -v
 ```
 
-On October 14, 2026, all 101 tests passed (TokenSpace 5, Oogway Core 70,
+On October 14, 2026, all 106 tests passed (TokenSpace 5, Oogway Core 75,
 Roundtable 24, public website boundary 2). Runtime counts and ingestion progress
 are live operational state and are intentionally not committed.
 

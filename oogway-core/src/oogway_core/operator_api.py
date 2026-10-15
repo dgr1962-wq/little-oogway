@@ -19,6 +19,7 @@ from .operator import OperatorRuntime, action_dict
 from .operator_store import OperatorStore
 from .private_memory import PrivateMemorySearchRuntime
 from .web_research import WebResearchRuntime
+from .vision import VisionRuntime
 
 
 TOKEN_FILE = Path.home() / ".config/little-oogway/operator.token"
@@ -98,6 +99,7 @@ class OperatorHandler(BaseHTTPRequestHandler):
     runtime: OperatorRuntime
     research: WebResearchRuntime
     memory: PrivateMemorySearchRuntime
+    vision: VisionRuntime
     token: str
     sessions: dict[str, tuple[str, float]] = {}
     sessions_lock = threading.Lock()
@@ -227,7 +229,7 @@ class OperatorHandler(BaseHTTPRequestHandler):
             else:
                 self._json(404, {"error": "not found"})
                 return
-        except (OSError, ValueError, PermissionError) as exc:
+        except (OSError, RuntimeError, ValueError, PermissionError) as exc:
             self._json(400, {"error": f"{type(exc).__name__}: {exc}"})
             return
         self._json(200, payload)
@@ -290,6 +292,19 @@ class OperatorHandler(BaseHTTPRequestHandler):
             return
         try:
             body = self._body()
+            if parsed.path == "/v1/vision/inspect":
+                payload = self.vision.inspect(
+                    str(body.get("source", "")), str(body.get("question", ""))
+                )
+                self._json(200, payload)
+                return
+            if parsed.path == "/v1/vision/variation-prompt":
+                payload = self.vision.variation_prompt(
+                    str(body.get("source", "")),
+                    str(body.get("requested_change", "")),
+                )
+                self._json(200, payload)
+                return
             if parsed.path not in {"/v1/actions/command", "/v1/actions/admin-command"}:
                 self._json(404, {"error": "not found"})
                 return
@@ -308,7 +323,7 @@ class OperatorHandler(BaseHTTPRequestHandler):
                 str(body.get("reason", "")),
                 requested_by=str(body.get("requested_by", "little-oogway")),
             )
-        except (OSError, ValueError, PermissionError) as exc:
+        except (OSError, RuntimeError, ValueError, PermissionError) as exc:
             self._json(400, {"error": f"{type(exc).__name__}: {exc}"})
             return
         self._json(HTTPStatus.CREATED, {"action": action_dict(action), "approval_url": "http://127.0.0.1:8094/"})
@@ -325,6 +340,7 @@ def main() -> int:
     OperatorHandler.runtime = runtime
     OperatorHandler.research = WebResearchRuntime()
     OperatorHandler.memory = PrivateMemorySearchRuntime()
+    OperatorHandler.vision = VisionRuntime()
     OperatorHandler.token = load_token()
     server = ThreadingHTTPServer((args.host, args.port), OperatorHandler)
     print(f"Little Oogway operator listening on http://{args.host}:{args.port}", flush=True)

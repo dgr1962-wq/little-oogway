@@ -216,6 +216,29 @@ operations must receive operation-specific argument profiles before they can be
 enabled; executable-name allowlisting and generic PolicyKit approval are not
 accepted as a root boundary.
 
+### Private vision and image workspace
+
+The authenticated Core model has a separate visual-understanding tool in
+`openwebui_tools/little_oogway_vision.py`. It accepts an approved local image or
+public HTTPS source, limits input to 20 MiB, revalidates redirects against SSRF,
+and uses FFmpeg to normalize common formats such as WebP into a bounded JPEG
+before Qwen3-VL inspection. A variation request performs observation first and
+then asks the text model to compose an SDXL prompt; image text is always treated
+as untrusted content rather than instructions.
+
+Stable Diffusion runs on Main Desk as `stable-diffusion.service`, tuned for its
+12 GB GPU with SDXL medium-VRAM mode, xformers, full-precision VAE decoding, and
+bounded allocator splits. The small authenticated LAN controller exposes only
+status, start, stop, and restart for that one user service. The Open WebUI tool
+checks the authenticated administrator role before calling it. It exposes no
+filesystem API, shell, arbitrary process control, CORS browser surface, or
+router port, and it must never be registered with the public website assistant.
+
+The controller implementation is
+`src/oogway_core/image_workspace_control.py`. Its token belongs in the ignored,
+mode-600 file `~/.config/little-oogway/main-desk-image-control.token` on both
+machines. Do not commit or print it.
+
 ### Public website retrieval
 
 The AnyKeyCafe worker is intentionally separate from the private runtime. A
@@ -232,7 +255,12 @@ cd /home/darren/Documents/Little-Oogway/oogway-core
 .venv/bin/python -m unittest discover -s tests -v
 ```
 
-The tests cover Ollama chat and embedding requests, dimensionality validation, chunking, credential redaction, source hashing, ordered multi-round persistence, failed model-call persistence, memory-context handling, citation validation, retrieval relevance and diversity controls, evaluation scoring, blank prompts, the Roundtable response contract, and enforcement of the isolated development database target.
+The tests cover Ollama chat and embedding requests, dimensionality validation,
+chunking, credential redaction, source hashing, ordered multi-round persistence,
+failed model-call persistence, memory-context handling, citation validation,
+retrieval relevance and diversity controls, visual normalization, fixed-action
+image-workspace control, evaluation scoring, blank prompts, the Roundtable
+response contract, and enforcement of the isolated development database target.
 
 ## Validation evidence
 
