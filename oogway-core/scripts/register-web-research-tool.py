@@ -153,6 +153,11 @@ def main() -> int:
         if TOOL_ID not in tool_ids:
             tool_ids.append(TOOL_ID)
         model_meta["toolIds"] = tool_ids
+        # Keep Core's deliberately curated private tool surface small. Open
+        # WebUI's generic builtin catalogue (notes, calendar, automations,
+        # etc.) can overwhelm an 8B model and obscure these attached tools.
+        capabilities = model_meta.setdefault("capabilities", {})
+        capabilities["builtin_tools"] = False
         system_prompt = str(model_params.get("system") or "").rstrip()
         if RESEARCH_PROTOCOL not in system_prompt:
             system_prompt = f"{system_prompt}\n\n{RESEARCH_PROTOCOL}".strip()

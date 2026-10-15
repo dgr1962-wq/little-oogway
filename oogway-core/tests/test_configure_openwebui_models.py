@@ -73,6 +73,18 @@ class OpenWebUiSelectorTests(unittest.TestCase):
                 ).fetchone(),
                 (1,),
             )
+            settings = json.loads(
+                connection.execute(
+                    "SELECT settings FROM user WHERE id = 'admin-test'"
+                ).fetchone()[0]
+            )
+            self.assertEqual(settings["ui"]["models"], ["little-oogway-core"])
+            core_meta = json.loads(
+                connection.execute(
+                    "SELECT meta FROM model WHERE id = 'little-oogway-core'"
+                ).fetchone()[0]
+            )
+            self.assertFalse(core_meta["capabilities"]["builtin_tools"])
             connection.close()
 
 

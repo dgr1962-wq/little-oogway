@@ -167,11 +167,30 @@ def configure(database: Path, backup_directory: Path, owner_id: str | None) -> P
                 timestamp=now,
             )
 
+        # Core's curated server-side tools must not be crowded out by Open
+        # WebUI's large generic builtin tool catalogue.  Small local models
+        # otherwise tend to see only notes/calendar/automation functions and
+        # miss the private research, operator, and ingestion bundles.
+        core = source.execute(
+            "SELECT meta FROM model WHERE id = ?", ("little-oogway-core",)
+        ).fetchone()
+        if core is not None:
+            core_meta = json.loads(core[0] or "{}")
+            capabilities = core_meta.setdefault("capabilities", {})
+            capabilities["builtin_tools"] = False
+            source.execute(
+                "UPDATE model SET meta = ?, updated_at = ? WHERE id = ?",
+                (json.dumps(core_meta), now, "little-oogway-core"),
+            )
+
         row = source.execute("SELECT settings FROM user WHERE id = ?", (owner_id,)).fetchone()
         if row is not None:
             settings = json.loads(row[0] or "{}")
             ui = settings.setdefault("ui", {})
-            ui["models"] = ["little-oogway-core", "little-oogway-roundtable"]
+            # Open WebUI applies a model's default tools only when exactly one
+            # model is selected. Keep Roundtable available in the selector,
+            # but default new chats to Core alone so its research tools attach.
+            ui["models"] = ["little-oogway-core"]
             source.execute(
                 "UPDATE user SET settings = ?, updated_at = ? WHERE id = ?",
                 (json.dumps(settings), now, owner_id),
