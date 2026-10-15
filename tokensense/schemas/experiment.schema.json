@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://anykeycafe.com/schemas/tokensense-experiment-v1.json",
+  "type": "object",
+  "required": ["experiment_id", "baseline", "candidate", "resource_measurements", "failures", "reproducibility", "status"],
+  "properties": {
+    "experiment_id": {"type": "string"},
+    "baseline": {"type": "object"},
+    "candidate": {"type": "object"},
+    "resource_measurements": {"type": "object"},
+    "failures": {"type": "array", "items": {"type": "object"}},
+    "reproducibility": {"type": "object"},
+    "status": {"enum": ["planned", "running", "complete", "failed", "invalid", "archived"]}
+  }
+}

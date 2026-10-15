@@ -62,6 +62,11 @@ credentials, browser profiles, model files, or the frozen legacy corpus.
   as autonomous GUI control.
 - **Nomic Atlas export** produces a deliberately filtered public-only semantic
   map. The first 2,000-point map is linked from the live Little Oogway page.
+- **TokenSense research infrastructure** provides an isolated, inactive
+  CUDA/LoRA laboratory with synthetic validation, typed evidence registries,
+  reproducible adapter metadata, guarded GPU preflights, controlled evaluation
+  plans, and private Atlas snapshots. It does not alter TokenSpace or select a
+  production adapter.
 
 Current public pages:
 
@@ -85,6 +90,7 @@ Current public pages:
 - `integrations/searxng/` — loopback-only private metasearch service.
 - `integrations/wordpress/` — source for the Little Oogway Atlas website
   section.
+- `tokensense/` — isolated LoRA/QLoRA research scaffolding and safety gates.
 - `docs/` — experiment plans and dated project status reports.
 
 ## Security and data boundaries
@@ -110,11 +116,13 @@ python3 -m unittest discover -s tokenspace/tests -v
 PYTHONPATH=oogway-core/src python3 -m unittest discover -s oogway-core/tests -v
 PYTHONPATH=roundtable/src python3 -m unittest discover -s roundtable/tests -v
 python3 -m unittest discover -s integrations/public-website -v
+PYTHONPATH=tokensense/src python3 -m unittest discover -s tokensense/tests -v
 ```
 
-On October 14, 2026, all 132 tests passed (TokenSpace 5, Oogway Core 101,
-Roundtable 24, public website boundary 2). Runtime counts and ingestion progress
-are live operational state and are intentionally not committed.
+On October 14, 2026, all 139 tests passed (TokenSpace 5, Oogway Core 101,
+Roundtable 24, public website boundary 2, TokenSense infrastructure 7). Runtime
+counts and ingestion progress are live operational state and are intentionally
+not committed.
 
 ## Development boundary
 

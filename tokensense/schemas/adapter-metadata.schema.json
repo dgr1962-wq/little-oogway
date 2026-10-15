@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://anykeycafe.com/schemas/tokensense-adapter-v1.json",
+  "title": "TokenSense adapter metadata",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "adapter_id", "experiment_id", "status", "created_at",
+    "base_model", "framework", "adapter", "training_data", "training",
+    "checkpoints", "evaluations", "status_history"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "adapter_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"},
+    "experiment_id": {"type": "string", "minLength": 3},
+    "status": {"enum": ["experimental", "validated", "production", "archived"]},
+    "created_at": {"type": "string", "format": "date-time"},
+    "base_model": {
+      "type": "object",
+      "required": ["identifier", "revision"],
+      "properties": {
+        "identifier": {"type": "string"},
+        "revision": {"type": "string", "minLength": 7},
+        "sha256": {"type": ["string", "null"]}
+      }
+    },
+    "framework": {"type": "object"},
+    "adapter": {
+      "type": "object",
+      "required": ["method", "configuration"],
+      "properties": {
+        "method": {"enum": ["lora", "qlora"]},
+        "configuration": {"type": "object"}
+      }
+    },
+    "training_data": {
+      "type": "object",
+      "required": ["manifest", "sha256"],
+      "properties": {
+        "manifest": {"type": "string"},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "training": {"type": "object"},
+    "checkpoints": {"type": "array", "items": {"type": "object"}},
+    "evaluations": {"type": "array", "items": {"type": "object"}},
+    "status_history": {"type": "array", "items": {"type": "object"}}
+  }
+}

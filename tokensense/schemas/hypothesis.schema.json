@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://anykeycafe.com/schemas/tokensense-hypothesis-v1.json",
+  "type": "object",
+  "required": ["hypothesis_id", "statement", "supporting_evidence", "conflicting_evidence", "predictions", "unresolved_questions", "review_status"],
+  "properties": {
+    "hypothesis_id": {"type": "string"},
+    "statement": {"type": "string"},
+    "supporting_evidence": {"type": "array", "items": {"type": "object"}},
+    "conflicting_evidence": {"type": "array", "items": {"type": "object"}},
+    "predictions": {"type": "array", "items": {"type": "object"}},
+    "unresolved_questions": {"type": "array", "items": {"type": "string"}},
+    "review_status": {"enum": ["candidate", "under_review", "supported", "weakened", "rejected", "superseded"]}
+  }
+}

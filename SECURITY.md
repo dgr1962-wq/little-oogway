@@ -81,6 +81,24 @@ identifiers, and excludes local files and conversations.
   does not grant autonomous GUI or publication control. Each state-changing
   controller requires its own reviewed operation and confirmation policy.
 
+## TokenSense research boundary
+
+- TokenSense dependencies live in a dedicated virtual environment. Production
+  Core, TokenSpace, Roundtable, Open WebUI, Stable Diffusion, and Ollama
+  environments are read-only references and are not package targets.
+- Datasets, model caches, adapters, checkpoints, experiments, reports, and
+  Atlas snapshots live under the private `/mnt/storage/tokensense` tree.
+- Training launch preflight refuses active Ollama models, blocking GPU compute
+  jobs, insufficient VRAM or storage, and missing exact operator authorization.
+  It never terminates a conflicting workload.
+- Memory relationships, hypotheses, contradictions, training candidates, and
+  adapters are proposals or registry records only. They cannot rewrite
+  TokenSpace, launch training, or change Oogway's runtime.
+- Production adapter selection requires an exact confirmation and changes only
+  an inactive registry pointer. No production service consumes that pointer.
+- Atlas research snapshots never upload and distinguish stored-knowledge
+  embeddings from experimental model-behavior observations.
+
 ## Private web-research boundary
 
 - Web search and page reading exist only in the authenticated private Open

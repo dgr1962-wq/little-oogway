@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://anykeycafe.com/schemas/tokensense-contradiction-v1.json",
+  "description": "Records tension without automatically selecting a winner.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contradiction_id", "statement_ids", "evidence", "review_status"],
+  "properties": {
+    "contradiction_id": {"type": "string"},
+    "statement_ids": {"type": "array", "minItems": 2, "items": {"type": "string"}},
+    "evidence": {"type": "array", "items": {"type": "object"}},
+    "review_status": {"enum": ["open", "reviewed", "context_dependent", "superseded"]},
+    "notes": {"type": "string"}
+  }
+}

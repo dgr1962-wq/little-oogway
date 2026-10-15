@@ -1,0 +1,24 @@
+{
+  "experiment_id": "replace-me",
+  "status": "planned",
+  "baseline": {
+    "model": "Qwen/Qwen3-8B",
+    "revision": "b968826d9c46dd6066d109eabc6255188de91218",
+    "results": null
+  },
+  "candidate": {
+    "adapter_id": "replace-me",
+    "results": null
+  },
+  "resource_measurements": {
+    "peak_vram_bytes": null,
+    "duration_seconds": null
+  },
+  "failures": [],
+  "reproducibility": {
+    "environment_manifest_sha256": "REPLACE_ME",
+    "dataset_manifest_sha256": "REPLACE_ME",
+    "random_seed": null,
+    "command": null
+  }
+}

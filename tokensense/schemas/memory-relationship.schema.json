@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://anykeycafe.com/schemas/tokensense-memory-relationship-v1.json",
+  "type": "object",
+  "required": ["relationship_id", "subject_memory_id", "object_memory_id", "relationship_type", "provenance", "evidence", "confidence", "review_status"],
+  "properties": {
+    "relationship_id": {"type": "string"},
+    "subject_memory_id": {"type": "string"},
+    "object_memory_id": {"type": "string"},
+    "relationship_type": {"type": "string"},
+    "provenance": {"type": "array", "items": {"type": "object"}},
+    "evidence": {"type": "array", "items": {"type": "object"}},
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    "review_status": {"enum": ["proposed", "reviewed", "accepted", "rejected", "superseded"]}
+  }
+}

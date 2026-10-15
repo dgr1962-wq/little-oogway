@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "private_root": "/mnt/storage/tokensense",
+  "environment": "/home/darren/venvs/tokensense-qlora",
+  "huggingface_home": "/mnt/storage/tokensense/models/huggingface",
+  "base_model": {
+    "training_identifier": "Qwen/Qwen3-8B",
+    "revision": "b968826d9c46dd6066d109eabc6255188de91218",
+    "revision_policy": "A full immutable commit must be recorded before download or training",
+    "production_inference_identifier": "qwen3:8b",
+    "production_ollama_manifest_sha256": "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41"
+  },
+  "preflight": {
+    "minimum_free_vram_mib": 10500,
+    "forbid_active_ollama_models": true,
+    "forbid_other_compute_processes": true,
+    "nonblocking_process_substrings": [
+      "/opt/google/chrome/chrome --type=gpu-process"
+    ]
+  },
+  "production_integration": false
+}

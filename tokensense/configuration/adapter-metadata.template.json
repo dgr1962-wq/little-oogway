@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "adapter_id": "replace-me",
+  "experiment_id": "replace-me",
+  "status": "experimental",
+  "created_at": "REPLACE_WITH_UTC_TIMESTAMP",
+  "base_model": {
+    "identifier": "Qwen/Qwen3-8B",
+    "revision": "b968826d9c46dd6066d109eabc6255188de91218",
+    "sha256": null
+  },
+  "framework": {
+    "environment_freeze_sha256": "REPLACE_ME"
+  },
+  "adapter": {
+    "method": "qlora",
+    "configuration": {}
+  },
+  "training_data": {
+    "manifest": "REPLACE_ME",
+    "sha256": "REPLACE_WITH_64_HEX_DIGEST"
+  },
+  "training": {},
+  "checkpoints": [],
+  "evaluations": [],
+  "status_history": [
+    {"status": "experimental", "at": "REPLACE_WITH_UTC_TIMESTAMP"}
+  ]
+}

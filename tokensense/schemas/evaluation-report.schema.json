@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://anykeycafe.com/schemas/tokensense-evaluation-v1.json",
+  "title": "TokenSense controlled comparison",
+  "type": "object",
+  "required": ["evaluation_id", "status", "baseline", "candidate", "controls", "cases", "summary"],
+  "properties": {
+    "evaluation_id": {"type": "string"},
+    "status": {"enum": ["planned", "running", "complete", "invalid"]},
+    "baseline": {"type": "object"},
+    "candidate": {"type": "object"},
+    "controls": {"type": "object"},
+    "cases": {"type": "array", "items": {"type": "object"}},
+    "summary": {"type": ["object", "null"]},
+    "limitations": {"type": "array", "items": {"type": "string"}}
+  }
+}

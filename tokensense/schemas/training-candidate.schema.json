@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://anykeycafe.com/schemas/tokensense-training-candidate-v1.json",
+  "type": "object",
+  "required": ["candidate_id", "source_references", "validation_status", "dataset_version", "permission_to_use"],
+  "properties": {
+    "candidate_id": {"type": "string"},
+    "source_references": {"type": "array", "items": {"type": "object"}},
+    "validation_status": {"enum": ["proposed", "reviewed", "approved", "rejected"]},
+    "dataset_version": {"type": "string"},
+    "permission_to_use": {"type": "boolean"},
+    "content_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  }
+}

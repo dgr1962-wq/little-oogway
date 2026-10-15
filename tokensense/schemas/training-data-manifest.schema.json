@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://anykeycafe.com/schemas/tokensense-training-data-v1.json",
+  "title": "TokenSense training-data manifest",
+  "type": "object",
+  "required": ["manifest_id", "created_at", "approval_status", "sources", "records_sha256"],
+  "properties": {
+    "manifest_id": {"type": "string"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "approval_status": {"enum": ["incoming", "validated", "approved", "rejected", "archived"]},
+    "sources": {"type": "array", "items": {"type": "object"}},
+    "records_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "record_count": {"type": "integer", "minimum": 0},
+    "notes": {"type": "string"}
+  }
+}

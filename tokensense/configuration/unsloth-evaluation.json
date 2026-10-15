@@ -1,0 +1,15 @@
+{
+  "evaluated_at": "2026-10-14",
+  "package_version_examined": "2026.10.5",
+  "hardware": "NVIDIA RTX 3060 12 GiB, compute capability 8.6",
+  "compatibility": {
+    "python_3_12": true,
+    "torch_2_6": true,
+    "requires_peft": ">=0.18.0",
+    "requires_bitsandbytes": ">=0.45.5 and not 0.46.0 or 0.48.0",
+    "requires_transformers": ">=4.52.4, <=5.17.0 with exclusions",
+    "requires_xformers": ">=0.0.27.post2"
+  },
+  "decision": "not-installed-in-reference-environment",
+  "reason": "Potentially beneficial for later 8B QLoRA efficiency, but it would replace the already hardware-proven conservative PEFT dependency lane. Evaluate in a separate optional environment after the reference path and evaluation corpus exist."
+}

@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "status": "framework-only-no-results",
+  "dimensions": [
+    "factual_accuracy",
+    "uncertainty_recognition",
+    "source_attribution",
+    "independent_hypothesis_generation",
+    "resistance_to_unsupported_agreement",
+    "consistency",
+    "evidence_based_conclusion_updates",
+    "linux_troubleshooting"
+  ],
+  "required_controls": [
+    "identical_prompt",
+    "identical_retrieval_context",
+    "identical_inference_parameters",
+    "blind_scoring_where_practical"
+  ]
+}
