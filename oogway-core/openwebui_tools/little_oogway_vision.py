@@ -1,7 +1,7 @@
 """
 title: Little Oogway Visual Understanding
 author: AnyKey Cafe
-version: 0.1.0
+version: 0.2.0
 required_open_webui_version: 0.11.0
 description: Admin-only, format-normalized visual inspection and two-pass SDXL prompt composition through Oogway Core.
 """
@@ -36,13 +36,25 @@ def _request(path: str, payload: dict) -> dict:
         return json.loads(response.read().decode("utf-8"))
 
 
-def _image_workspace_request(path: str, method: str = "GET") -> dict:
+def _media_workspace_request(
+    path: str,
+    method: str = "GET",
+    payload: dict[str, Any] | None = None,
+) -> dict:
     token = IMAGE_CONTROL_TOKEN_FILE.read_text(encoding="utf-8").strip()
+    data = (
+        json.dumps(payload).encode("utf-8")
+        if payload is not None
+        else (b"" if method == "POST" else None)
+    )
     request = Request(
         IMAGE_CONTROL_URL + path,
-        data=b"" if method == "POST" else None,
+        data=data,
         method=method,
-        headers={"Authorization": f"Bearer {token}"},
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
     )
     with urlopen(request, timeout=60) as response:
         return json.loads(response.read().decode("utf-8"))
@@ -54,7 +66,7 @@ class Tools:
         if not _admin(__user__):
             return "Denied: image workspace control requires an authenticated administrator."
         return json.dumps(
-            _image_workspace_request("/v1/workspace/status"), indent=2, ensure_ascii=False
+            _media_workspace_request("/v1/workspace/status"), indent=2, ensure_ascii=False
         )
 
     def image_workspace_control(
@@ -69,7 +81,86 @@ class Tools:
         if normalized not in {"start", "stop", "restart"}:
             return "Denied: action must be start, stop, or restart."
         return json.dumps(
-            _image_workspace_request(f"/v1/workspace/{normalized}", method="POST"),
+            _media_workspace_request(f"/v1/workspace/{normalized}", method="POST"),
+            indent=2,
+            ensure_ascii=False,
+        )
+
+    def video_workspace_status(self, __user__: dict[str, Any] | None = None) -> str:
+        """Check whether the private Wan video workspace on Main Desk is running and ready. Administrator only."""
+        if not _admin(__user__):
+            return "Denied: video workspace control requires an authenticated administrator."
+        return json.dumps(
+            _media_workspace_request("/v1/workspace/status?workspace=video"),
+            indent=2,
+            ensure_ascii=False,
+        )
+
+    def video_workspace_control(
+        self,
+        action: str,
+        __user__: dict[str, Any] | None = None,
+    ) -> str:
+        """Start, stop, or restart the private Wan video workspace. Image and video engines cannot run simultaneously. Administrator only."""
+        if not _admin(__user__):
+            return "Denied: video workspace control requires an authenticated administrator."
+        normalized = action.strip().lower()
+        if normalized not in {"start", "stop", "restart"}:
+            return "Denied: action must be start, stop, or restart."
+        return json.dumps(
+            _media_workspace_request(
+                f"/v1/workspace/video/{normalized}", method="POST"
+            ),
+            indent=2,
+            ensure_ascii=False,
+        )
+
+    def generate_video(
+        self,
+        prompt: str,
+        negative_prompt: str = "",
+        width: int = 640,
+        height: int = 352,
+        frames: int = 49,
+        fps: int = 16,
+        steps: int = 20,
+        cfg: float = 5.0,
+        seed: int = -1,
+        __user__: dict[str, Any] | None = None,
+    ) -> str:
+        """Queue one bounded text-to-video job in Main Desk's fixed Wan 2.2 workflow. Returns a job ID; administrator only."""
+        if not _admin(__user__):
+            return "Denied: video generation requires an authenticated administrator."
+        payload: dict[str, Any] = {
+            "prompt": prompt,
+            "width": width,
+            "height": height,
+            "frames": frames,
+            "fps": fps,
+            "steps": steps,
+            "cfg": cfg,
+            "seed": seed,
+        }
+        if negative_prompt.strip():
+            payload["negative_prompt"] = negative_prompt
+        return json.dumps(
+            _media_workspace_request(
+                "/v1/video/generate", method="POST", payload=payload
+            ),
+            indent=2,
+            ensure_ascii=False,
+        )
+
+    def video_generation_status(
+        self,
+        prompt_id: str,
+        __user__: dict[str, Any] | None = None,
+    ) -> str:
+        """Check a previously queued Main Desk video job and report its saved output. Administrator only."""
+        if not _admin(__user__):
+            return "Denied: video generation status requires an authenticated administrator."
+        return json.dumps(
+            _media_workspace_request(f"/v1/video/jobs/{prompt_id.strip()}"),
             indent=2,
             ensure_ascii=False,
         )

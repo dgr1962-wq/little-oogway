@@ -216,7 +216,7 @@ operations must receive operation-specific argument profiles before they can be
 enabled; executable-name allowlisting and generic PolicyKit approval are not
 accepted as a root boundary.
 
-### Private vision and image workspace
+### Private vision and media workspaces
 
 The authenticated Core model has a separate visual-understanding tool in
 `openwebui_tools/little_oogway_vision.py`. It accepts an approved local image or
@@ -233,6 +233,14 @@ status, start, stop, and restart for that one user service. The Open WebUI tool
 checks the authenticated administrator role before calling it. It exposes no
 filesystem API, shell, arbitrary process control, CORS browser surface, or
 router port, and it must never be registered with the public website assistant.
+
+Wan 2.2 TI2V 5B runs separately in a localhost-only ComfyUI service on Main
+Desk. Core can check, start, stop, and restart that service; submit a bounded
+text-to-video request through one reviewed graph; and check the returned job
+ID. The controller rejects arbitrary nodes, unsafe sizes, excessive prompt
+lengths, and simultaneous image/video GPU services. Generated files are saved
+under `~/Videos/Little-Oogway`. These controls are attached only to the
+authenticated Core model, never to the public assistant or Roundtable.
 
 The controller implementation is
 `src/oogway_core/image_workspace_control.py`. Its token belongs in the ignored,

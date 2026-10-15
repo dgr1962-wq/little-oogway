@@ -1,5 +1,5 @@
 [Unit]
-Description=Authenticated Little Oogway image workspace controller
+Description=Authenticated Little Oogway media workspace controller
 After=network-online.target
 
 [Service]

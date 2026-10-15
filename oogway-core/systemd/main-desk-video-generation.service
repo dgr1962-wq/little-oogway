@@ -1,0 +1,20 @@
+[Unit]
+Description=Little Oogway Wan 2.2 video generation workspace
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/mnt/AI_WORKSPACE/Generative-Video/ComfyUI
+ExecStart=/mnt/AI_WORKSPACE/Generative-Video/ComfyUI/.venv/bin/python /mnt/AI_WORKSPACE/Generative-Video/ComfyUI/main.py --listen 127.0.0.1 --port 8188 --disable-auto-launch --output-directory /home/darren/Videos/Little-Oogway
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=45
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/darren/Videos/Little-Oogway /mnt/AI_WORKSPACE/Generative-Video/ComfyUI
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=default.target
