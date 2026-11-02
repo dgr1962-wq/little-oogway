@@ -1,0 +1,13 @@
+AnyKey Cafe website release, November 2, 2026
+
+Public WordPress integration and reviewed Session 006 derivative only.
+Installer is private CLI tooling, never to be placed in the web root.
+It guards existing destinations, hashes payloads, saves the prior theme navigation and active-plugin list, and records completion.
+
+Installation v1 stopped before activation because wp-load reused the global $plugin variable. Version 2 uses a release-specific name and sets web-file creation permissions explicitly.
+
+Local verification: 390, 1280, 1600 px; zero card center error, no horizontal overflow. Page Map independently operable; PHP syntax passed.
+
+Gemini is a configured fifth seat. Historical session participant lists remain unchanged. Browser delivery timeouts are not votes or proven model context limits.
+
+Live release verified November 2, 2026 at 00:47 PST (08:47 UTC). Session post 8835 published. Intermediate-width card center error 0; no overflow; film loaded with 172.8-second duration and readyState 4; Page Map opens independently. Hub, session return links, and Experiments menu verified. Temporary deployment cron removed. Rollback files retained privately on hosting.

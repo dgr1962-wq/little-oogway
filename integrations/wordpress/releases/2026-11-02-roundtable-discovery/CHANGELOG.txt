@@ -1,0 +1,5 @@
+Website release — November 2, 2026
+
+Centers reading cards at intermediate desktop widths, retaining Page Map access. Separates Page Map from Ask Little O. Adds author context before the book launch film. Promotes Roundtable public sessions in Experiments. Publishes reviewed Session 006 derivative with return links to the book and implementation history. Adds current Gemini-seat status without rewriting historical participant lists or presenting timeouts as votes. Private novel and raw memory excluded.
+
+Local QA: PHP syntax passed; 390, 1280, 1600 pixel viewports show zero reading-card center error and no horizontal overflow. Page Map interaction verified.
